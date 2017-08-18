@@ -36,7 +36,7 @@ def check_table(connection,table_name):
     tb_create = "CREATE TABLE `" + table_name + "` ("                     + \
                     "id int(15) NOT NULL AUTO_INCREMENT,"    + \
                     "spec_title varchar(100) COLLATE utf8_bin NOT NULL,"    + \
-                    "cluster_id varchar(100) COLLATE utf8_bin NOT NULL,"    + \
+                    "scan_in_lib int(15) COLLATE utf8_bin NOT NULL,"    + \
                     "dot float NOT NULL,"    + \
                     "delta float NOT NULL,"    + \
                     "dot_bias float NOT NULL,"    + \
@@ -118,30 +118,33 @@ def connect_and_check(mysql_host, table_name):
 
 def get_lib_spec_index(protein_str):
     words = protein_str.split("_") 
-    return words[1]
+    return words[2]
 
 def remove_pepxml_ext(path_name):
     return path_name[:-7]
 
-def get_id_map(mzXML_path):
-    ns_str = "{http://sashimi.sourceforge.net/schema_revision/mzXML_3.2}"
-    tree = ET.parse(mzXML_path)
+def get_spec_title(mzML_path):
+    mzMLfile = open(mzML_path)
+    ns_str = "{http://psi.hupo.org/ms/mzml}"
+    tree = ET.parse(mzMLfile)
     root = tree.getroot()
     id_map = {}
-    for scan in root.iterfind(ns_str + "msRun/" + ns_str + "scan"):
-        scan_num = scan.attrib.get('num')
-        for nameValue in scan.iterfind(ns_str + 'nameValue'):
-            name = nameValue.attrib.get('name')
-            id_value = nameValue.attrib.get('value')
-            if name != 'ClusterUniID':
-                raise Exception ("Got unexpected nameValue tag inside scan " + scan_num)
-            id_map[scan_num] = id_value
+    for spectrum in root.iter(ns_str + "spectrum"):
+        index = spectrum.attrib.get('index')
+        for cvParam in spectrum.iterfind(ns_str + 'cvParam'):
+            name = cvParam.attrib.get('name')
+            if name == 'spectrum title':
+                id_value = cvParam.attrib.get('value')
+                id_map[index] = id_value
+                if id_value == None:
+                    raise("Spectrum index" + index + " has empty spectrum title")
+    mzMLfile.close()
     return(id_map)
 
 def insert_to_db(connection, table_name, search_result_set):
     """    
     "spec_title varchar(100) NOT NULL,"    + \
-    "cluster_id varchar(100) COLLATE utf8_bin NOT NULL,"    + \
+    "scan_in_lib int(15) COLLATE utf8_bin NOT NULL,"    + \
     "dot float NOT NULL,"    + \
     "delta float NOT NULL,"    + \
     "dot_bias float NOT NULL,"    + \
@@ -150,7 +153,7 @@ def insert_to_db(connection, table_name, search_result_set):
     """
     spec_title = list(search_result_set.keys())[0]
     search_result = search_result_set.get(spec_title)
-    cluster_id = search_result.get('lib_spec_index')
+    scan_in_lib = search_result.get('lib_spec_index')
     dot = search_result.get('dot')
     delta = search_result.get('delta')
     dot_bias = search_result.get('dot_bias')
@@ -159,26 +162,32 @@ def insert_to_db(connection, table_name, search_result_set):
 
 
     insert_db = "INSERT INTO `" + table_name +"`" +\
-                "(spec_title, cluster_id, dot, delta, dot_bias, mz_diff, fval) VALUES " +\
-                "('" + spec_title + "','" + cluster_id + "','" + dot + "','" + delta +"','" + dot_bias + "','" + mz_diff + "','" + fval + "')"
+                "(spec_title, scan_in_lib, dot, delta, dot_bias, mz_diff, fval) VALUES " +\
+                "('" + spec_title + "','" + scan_in_lib + "','" + dot + "','" + delta +"','" + dot_bias + "','" + mz_diff + "','" + fval + "')"
 
     with connection.cursor() as cursor:
         cursor.execute(insert_db)
 
 
-def importafile(connection, table_name, pepxml_path):
+def importafile(connection, table_name, pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
     tree = ET.parse(pepxml_path)
     root = tree.getroot()
 
     print("Starting to import " + pepxml_path)
     msms_run_summary = root[0]
+    count = 0
     for spectrum_query in msms_run_summary.iterfind(ns_str + "spectrum_query"):
         #start_scan = spectrum_query.attrib.get('start_scan')
         #end_scan = spectrum_query.attrib.get('end_scan')
         #if start_scan != end_scan :
         #    raise Exception ("Some thing wrong with this spectrum_query, start_scan %d != end_scan %d"%(start_scan, end_scan))
-        spectrum = spectrum_query.attrib.get('spectrum')
+        start_scan = spectrum_query.attrib.get('start_scan')
+        scan_num_in_mzml = str(int(start_scan) - 1) #scan_num start at 1 in pep.xml, but at 0 in mzML
+        spectrum = title_map.get(scan_num_in_mzml)
+        if spectrum == None:
+            raise Exception("Spectrum in pepxml at scan " + start_scan + " has no spectrum title")
+        count = count + 1
         
         search_result = spectrum_query[0]
         if search_result.tag != ns_str + 'search_result':
@@ -191,8 +200,6 @@ def importafile(connection, table_name, pepxml_path):
                 raise Exception ("Some thing wrong with this spectrum_query, search_hit is more than one: %s"%spectrum_query.attrib.get('spectrum'))
             protein_str = search_hit.attrib.get("protein")
             lib_spec_index = get_lib_spec_index(protein_str)
-            print(protein_str)
-            sys.exit(0)
             search_scores = {}
             search_scores['lib_spec_index'] = lib_spec_index
             for search_score in search_hit.getchildren():
@@ -202,25 +209,30 @@ def importafile(connection, table_name, pepxml_path):
         search_results[spectrum] = search_scores
         insert_to_db(connection, table_name, search_results)
     connection.commit()    
-    print("Importing of " + pepxml_path + "is done")
+    print("Importing of " + pepxml_path + "is done.")
+    print("Totally " + str(count) + "spectra have been imported.")
 
 def main():
     arguments = docopt(__doc__, version='import_splib_result.py 1.0 BETA')
     input_path = arguments['--input'] or arguments['-i']
     
-    table_name = "spec_lib_search_result_1"
+    table_name = "test_spec_lib_search_result_1"
     connection = connect_and_check('localhost', table_name)
 
 #    if arguments['--tablename']:
 #        table_name = arguments['--tablename']
    
-#    mzXML_path = remove_pepxml_ext(pepxml_path) + "mzXML"
-#    cluster_id_map = get_id_map(mzXML_path)
+    mzML_path = remove_pepxml_ext(input_path) + "mzML"
+    title_map = get_spec_title(mzML_path)
+#    index_title_map = get_index_map("../../spec_lib_searching/PXD000021/head.mzML")
 
-    for file in os.listdir(input_path):
-        if not file.lower().endswith('.pep.xml'):
-            continue
-        importafile(connection, table_name, input_path + "/" + file)
+    if os.path.isfile(input_path):
+        importafile(connection, table_name, input_path, title_map)
+    else:
+    	for file in os.listdir(input_path):
+            if not file.lower().endswith('.pep.xml'):
+                continue
+            importafile(connection, table_name, input_path + "/" + file, index_title_map)
 
 if __name__ == "__main__":
     main()
