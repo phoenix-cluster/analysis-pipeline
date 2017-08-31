@@ -3,7 +3,7 @@
 This tool import the target spectra's identification data into the mysql db. 
 
 Usage:
-  identi_data_to_mysql.py --input=<path to mgf files> 
+  identi_data_to_mysql.py --input=<path_to_mgf_files> [--tablename=<tablename>] 
   identi_data_to_mysql.py (--help | --version)
 
 Options:
@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 import pymysql.cursors
 from pyteomics import mgf
 connection = None
-table_name = 'test_spec_lib1' + '_ident'
+table_name = 'PXD003292' + '_ident'
 
 def check_table():
     global connection, table_name
@@ -100,11 +100,12 @@ def insert_to_db(title,seq):
 def main():
     global connection, table_name
 
-    connect_and_check('localhost')
     arguments = docopt(__doc__, version='identi_data_to_mysql.py 1.0 BETA')
     mgf_path = arguments['--input'] or arguments['-i']
     if arguments['--tablename']:
         table_name = arguments['--tablename']
+
+    connect_and_check('localhost')
 
     for file in os.listdir(mgf_path):
         if not file.lower().endswith('.mgf'):

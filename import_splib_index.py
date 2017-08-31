@@ -132,10 +132,13 @@ def main():
     connection = connect_and_check('localhost', table_name)
    
     scan_clusterid_map = get_id_map(mzXML_path)
-
-    for scan_num in scan_clusterid_map.keys():
-        insert_to_db(connection, table_name, scan_num, scan_clusterid_map.get(scan_num))
-    connection.commit()
+    
+    with open('test_scan_clusterid_map.tab','w') as o:
+        for scan_num in scan_clusterid_map.keys():
+            o.write("%s\t%s" % (scan_num,scan_clusterid_map.get(scan_num))
+#    for scan_num in scan_clusterid_map.keys():
+#        insert_to_db(connection, table_name, scan_num, scan_clusterid_map.get(scan_num))
+#    connection.commit()
 
 if __name__ == "__main__":
     main()

@@ -4,12 +4,12 @@ This tool get the target spectra and search hits from the spectra library.
 The library is built from the PRIDE Cluster consensus spectra without identified information to use.
 
 Usage:
-  import_splib_result.py --input=<results.pep.xml> 
+  import_splib_result.py --input=<results.pep.xml> [--tablename=<tablename>]
   import_splib_result.py (--help | --version)
 
 Options:
   -i, --input=<results.pep.xml>        Path to the result .pep.xml file to process.
-  --tablename=[table_name]             Table name in MySQL db to store the spectra library search result.
+  --tablename=[tablename]             Table name in MySQL db to store the spectra library search result.
   --host=[host_name_of_db]             Host name or IP address of the MySQL server.
   -h, --help                           Print this help message.
   -v, --version                        Print the current version.
@@ -90,7 +90,8 @@ def check_table(connection,table_name):
                 else:
                     create_new = True 
 
-            if over_write_table or create_new :
+#            if over_write_table or create_new :
+            if True:
                 if table_exists:
                     print("Start droping the tables")
                     cursor.execute("DROP TABLE IF EXISTS `" + table_name + "`;")
@@ -164,7 +165,6 @@ def insert_to_db(connection, table_name, search_result_set):
     insert_db = "INSERT INTO `" + table_name +"`" +\
                 "(spec_title, scan_in_lib, dot, delta, dot_bias, mz_diff, fval) VALUES " +\
                 "('" + spec_title + "','" + scan_in_lib + "','" + dot + "','" + delta +"','" + dot_bias + "','" + mz_diff + "','" + fval + "')"
-
     with connection.cursor() as cursor:
         cursor.execute(insert_db)
 
@@ -217,22 +217,26 @@ def main():
     input_path = arguments['--input'] or arguments['-i']
     
     table_name = "test_spec_lib_search_result_1"
-    connection = connect_and_check('localhost', table_name)
 
-#    if arguments['--tablename']:
-#        table_name = arguments['--tablename']
+    if arguments['--tablename']:
+        table_name = arguments['--tablename']
+    connection = connect_and_check('localhost', table_name)
    
-    mzML_path = remove_pepxml_ext(input_path) + "mzML"
-    title_map = get_spec_title(mzML_path)
 #    index_title_map = get_index_map("../../spec_lib_searching/PXD000021/head.mzML")
 
     if os.path.isfile(input_path):
+        mzML_path = remove_pepxml_ext(input_path) + "mzML"
+        print(mzML_path)
+        title_map = get_spec_title(mzML_path)
         importafile(connection, table_name, input_path, title_map)
     else:
     	for file in os.listdir(input_path):
             if not file.lower().endswith('.pep.xml'):
                 continue
-            importafile(connection, table_name, input_path + "/" + file, index_title_map)
+            mzML_path = remove_pepxml_ext(file) + "mzML"
+            print(mzML_path)
+            title_map = get_spec_title(mzML_path)
+            importafile(connection, table_name, input_path + "/" + file, title_map)
 
 if __name__ == "__main__":
     main()
