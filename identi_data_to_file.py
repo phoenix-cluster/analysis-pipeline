@@ -19,6 +19,7 @@ import os,glob
 from docopt import docopt
 import xml.etree.ElementTree as ET
 from pyteomics import mgf
+import phoenix_import_util as phoenix_writer
 
 def write_to_file(identifications, output_file):
     with open(output_file,'w') as o:
@@ -42,9 +43,19 @@ def process(mgf_path, output_file):
 #                seq = "_UNID_"
                 continue
             identifications[title] = seq            
-    if imported_n < 1:
-        raise Exception("No mgf file found here! %s"%(mgf_path))
-    write_to_file(identifications, output_file)
+    if imported_n < 1:  #read from old identification files
+        if os.path.isfile(output_file) and os.path.getsize(output_file)>1000:
+            with open(output_file,'r') as o:
+                lines = o.readlines()[1:]  #remove the table head line
+            for line in lines:
+                sections = line.split("\t")
+                title = sections[0]
+                seq = sections[1]
+                identifications[title] = seq            
+        else:
+            raise Exception("No mgf file found here! %s"%(mgf_path))
+    #write_to_file(identifications, output_file)
+    phoenix_writer.export_ident_to_phoenix("pxd000021_test", "localhost", identifications)
 
 
     """

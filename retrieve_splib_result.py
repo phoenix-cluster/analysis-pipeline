@@ -1,16 +1,17 @@
 #!/usr/bin/python3
 """ retrieve_splib_result.py
 
-This tool get the target spectra and search hits from the spectra library. 
+This tool get the target spectra and search hits from the spectra library, and export them to file or Phoenix/HBase table. 
 The library is built from the PRIDE Cluster consensus spectra without identified information to use.
 
 Usage:
-  retrieve_splib_result.py --input=<results.pep.xml> [--output=<output_file>]
+  retrieve_splib_result.py --input=<results.pep.xml> [--output=<output_file>  --project=<project_id>]
   retrieve_splib_result.py (--help | --version)
 
 Options:
   -i, --input=<results.pep.xml>        Path to the result .pep.xml file to process, could be a directory or pep.xml file
   --output =[output file name]         Output file for storing the spectra library search result in tabular format.
+  --project =[project id]              Searching results come from a project.
   -h, --help                           Print this help message.
   -v, --version                        Print the current version.
 
@@ -19,6 +20,9 @@ import sys
 import os
 from docopt import docopt
 import xml.etree.ElementTree as ET
+import phoenixdb
+import time 
+import phoenix_import_util as phoenix_writer
 
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
@@ -64,6 +68,10 @@ def write_to_file(output_file, search_results):
             fval = search_result.get('fval')
             o.write("%s\t%s\t%s\t%s\n"%(spec_title, scan_in_lib, dot, fval))
 
+
+"""
+retrive the results and write to output_file
+"""
 def retrieve_file(output_file, pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
     tree = ET.parse(pepxml_path)
@@ -102,9 +110,10 @@ def retrieve_file(output_file, pepxml_path, title_map):
                 score_value = search_score.attrib.get('value')
                 search_scores[score_name] = score_value 
         search_results[spectrum] = search_scores
-    write_to_file(output_file, search_results)
-    print("Retrieving of " + pepxml_path + "is done.")
-    print("Totally " + str(count) + "spectra have been imported.")
+#    write_to_file(output_file, search_results)
+    phoenix_writer.export_sr_to_phoenix("PXD000021", "localhost", search_results)
+    print("Retrieving of " + pepxml_path + " is done.")
+    print("Totally " + str(count) + "spectra have been imported from this file.")
 
 def write_head_to_file(output_file):
     with open(output_file, 'w') as o:

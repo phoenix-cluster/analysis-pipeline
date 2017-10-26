@@ -194,11 +194,17 @@ def prepare_shared_files():
     write_qualified_clusters(connection)
 
 
+"""
+prepare the lib_search_result.tab and identified_spectra.tab file for each project,
+for the next step analysis
+"""
 def prepare_project_files(project_id):
     input_path = project_id + '/'
     libmatch_output_file = project_id + '/lib_search_result.tab'
     id_output_file = project_id + '/identified_spectra.tab'
 
+    id_retriever.process(input_path, id_output_file) 
+    return
 
     if os.path.isfile(id_output_file) and os.path.getsize(id_output_file)>1000:
         print("%s is already there."%(id_output_file))
@@ -220,7 +226,7 @@ def main():
 
     prepare_shared_files()
     prepare_project_files(project_id)
-    
+    return 0    
     #get all library matched and identified spectra 
     (identified_n, id_match_list, unid_match_list) = get_spec_lib_match_from_file(project_id)
     
