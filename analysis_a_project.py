@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-This program get the fainal statitical analysis on the library searched result of a projedt.
+This program get the fainal statitical analysis on the library searched result of a project.
 """
 
 import pymysql.cursors
@@ -10,7 +10,8 @@ import pandas as pd
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 import retrieve_splib_result as retriever
-import identi_data_to_file as id_retriever
+#import identi_data_to_file as id_retriever
+import phoenix_import_util as phoenix 
 
 def get_connection(mysql_host):
     #build the connection
@@ -52,6 +53,11 @@ def get_spec_lib_match_from_file(project_id):
     
     identified_spectra = set()
     lib_search_matched_no = 0
+    
+    if not os.path.exists (project_id + '/identified_spectra.tab'):
+        print("error, no file " + project_id + '/identified_spectra.tab')
+        sys.exit(1)
+
     with open(project_id + '/identified_spectra.tab','r') as identified_file, open(project_id + '/lib_search_result.tab','r') as result_file:
         line = identified_file.readline()
         for line in identified_file.readlines():
@@ -87,6 +93,10 @@ def get_spec_lib_match_from_file(project_id):
     """
     return(len(identified_spectra), id_matchs, unid_matchs)
 
+
+
+
+
 """
 def get_qualified_clusters(connection):
     cluster_table = "201504_3"
@@ -104,6 +114,10 @@ def get_qualified_clusters(connection):
     return(clusters)
 """
 
+"""
+this function get clusters from mysql database based on some restrictions(cluster ratio/size)
+and write it into files for further using.
+"""
 def write_qualified_clusters(connection):
     cluster_table = "201504_3"
 #    ratio_threshold = "0.618"
@@ -144,6 +158,7 @@ def get_qualified_clusters_from_file():
             cluster_in_list.append(temp_list)
     clusters = pd.DataFrame(cluster_in_list, columns=('cluster_id', 'n_spec', 'ratio'))
     return(clusters)
+
 """
 def get_final(spectra_match_list, scannum_cluster_map, qualified_clusters):
     final_list = list()
@@ -188,6 +203,10 @@ def write_result_to_file(project_id, id_match_list, unid_match_list, qualified_c
                 o.write("%s\t%s\t%s\t%s\n"%(spectrum, matched_cluster, ratio, n_spec))
 
 
+
+"""
+prepare the files which will be used by all projects, e.g. the clusters file 
+"""
 def prepare_shared_files():
     connection = get_connection("localhost")
 #    write_scannum_cluster_map_to_file(connection)
@@ -203,18 +222,13 @@ def prepare_project_files(project_id):
     libmatch_output_file = project_id + '/lib_search_result.tab'
     id_output_file = project_id + '/identified_spectra.tab'
 
-    id_retriever.process(input_path, id_output_file) 
-    return
-
     if os.path.isfile(id_output_file) and os.path.getsize(id_output_file)>1000:
         print("%s is already there."%(id_output_file))
     else:
-        id_retriever.process(input_path, id_output_file) 
+        #id_retriever.process(input_path, id_output_file)  #removed because the idenfications are nolonger in mgf files, but from pride xml files
+        phoenix.retrieve_identification_from_phoenix(project_id, "localhost", id_output_file)
 
-    if os.path.isfile(libmatch_output_file) and os.path.getsize(libmatch_output_file)>1000:
-        print("%s is already there."%(libmatch_output_file))
-    else:
-        retriever.process(input_path, libmatch_output_file)
+    retriever.process(project_id, input_path, libmatch_output_file)
 
     
 def main():
@@ -226,7 +240,6 @@ def main():
 
     prepare_shared_files()
     prepare_project_files(project_id)
-    return 0    
     #get all library matched and identified spectra 
     (identified_n, id_match_list, unid_match_list) = get_spec_lib_match_from_file(project_id)
     

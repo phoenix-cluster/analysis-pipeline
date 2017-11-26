@@ -26,7 +26,10 @@ def write_to_file(identifications, output_file):
         o.write("spectrum_title\tsequence\n")
         for spec_title in identifications.keys():
             o.write("%s\t%s\n"%(spec_title, identifications[spec_title]))
-
+"""
+process the identification data, persisit them in file or phoenix_db
+@deprected, the identified data has been already in phoenix, and the mgf files nolonger has the identification infomation
+"""
 def process(mgf_path, output_file):
 
     identifications = dict()
@@ -48,14 +51,15 @@ def process(mgf_path, output_file):
             with open(output_file,'r') as o:
                 lines = o.readlines()[1:]  #remove the table head line
             for line in lines:
+                line = line.rstrip()
                 sections = line.split("\t")
                 title = sections[0]
                 seq = sections[1]
                 identifications[title] = seq            
         else:
             raise Exception("No mgf file found here! %s"%(mgf_path))
-    #write_to_file(identifications, output_file)
-    phoenix_writer.export_ident_to_phoenix("pxd000021_test", "localhost", identifications)
+    write_to_file(identifications, output_file)
+    #phoenix_writer.export_ident_to_phoenix("pxd000021_test", "localhost", identifications)
 
 
     """

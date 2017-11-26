@@ -31,6 +31,9 @@ def get_lib_spec_id(protein_str):
 def remove_pepxml_ext(path_name):
     return path_name[:-7]
 
+"""
+build the map from spectrum index(in mzML) to spectrum title
+"""
 def get_spec_title(mzML_path):
     mzMLfile = open(mzML_path)
     ns_str = "{http://psi.hupo.org/ms/mzml}"
@@ -48,7 +51,9 @@ def get_spec_title(mzML_path):
                     raise("Spectrum index" + index + " has empty spectrum title")
     mzMLfile.close()
     return(id_map)
-
+"""
+#write the spectra library search result to tabular file
+"""
 def write_to_file(output_file, search_results):
     """    
     "spec_title varchar(100) NOT NULL,"    + \
@@ -70,9 +75,9 @@ def write_to_file(output_file, search_results):
 
 
 """
-retrive the results and write to output_file
+retrive the results and write to output_file or phoenix database
 """
-def retrieve_file(output_file, pepxml_path, title_map):
+def retrieve_file(project_id, output_file, pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
     tree = ET.parse(pepxml_path)
     root = tree.getroot()
@@ -110,28 +115,42 @@ def retrieve_file(output_file, pepxml_path, title_map):
                 score_value = search_score.attrib.get('value')
                 search_scores[score_name] = score_value 
         search_results[spectrum] = search_scores
-#    write_to_file(output_file, search_results)
-    phoenix_writer.export_sr_to_phoenix("PXD000021", "localhost", search_results)
+        
+    write_to_file(output_file, search_results)
     print("Retrieving of " + pepxml_path + " is done.")
     print("Totally " + str(count) + "spectra have been imported from this file.")
+    return search_results
 
+"""
+write the table head to file
+"""
 def write_head_to_file(output_file):
     with open(output_file, 'w') as o:
         o.write("%s\t%s\t%s\t%s\n"%('spec_title', 'spec_in_lib', 'dot', 'fval'))
 
-def process(input_path, output_file):
+
+"""
+process the spec_cluster match results, persisit them in file or phoenix_db
+"""
+def process(project_id, input_path, output_file):
+    print("start to process the spec_cluster match results, persisit them in file or phoenix_db")
     write_head_to_file(output_file)
+    search_results = {}
+    
     if os.path.isfile(input_path):
         mzML_path = remove_pepxml_ext(input_path) + "mzML"
         title_map = get_spec_title(mzML_path)
-        retrieve_file(output_file, input_path, title_map)
+        search_results_of_file = retrieve_file(project_id, output_file, input_path, title_map)
     else:
     	for file in os.listdir(input_path):
             if not file.lower().endswith('.pep.xml'):
                 continue
             mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
             title_map = get_spec_title(mzML_path)
-            retrieve_file(output_file, input_path + "/" + file, title_map)
+            search_results_of_file = retrieve_file(project_id, output_file, input_path + "/" + file, title_map)
+            search_results.update(search_results_of_file)
+
+    phoenix_writer.export_sr_to_phoenix(project_id, "localhost", search_results)
 
 def main():
     arguments = docopt(__doc__, version='retrieve_splib_result.py 1.0 BETA')
@@ -143,7 +162,7 @@ def main():
     if arguments['--output']:
         output_file = arguments['--output']
     
-    process(input_path, output_file)
+    process(project_id, input_path, output_file)
 
 
 if __name__ == "__main__":
