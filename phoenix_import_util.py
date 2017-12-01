@@ -6,6 +6,13 @@ import sys,re,json
 cluster_table = "V_CLUSTER"
 lib_spec_table = cluster_table + "_SPEC"
 
+"""
+Get connection 
+"""
+def get_conn(host):
+    database_url = 'http://' + host + ':8765/'
+    conn = phoenixdb.connect(database_url, autocommit=True)
+    return conn
 
 """
 Get sequences' ratio from cluster, when the sequence is not matched to the max_seq
@@ -37,8 +44,8 @@ def get_seq_ratio(spectrum_pep, cluster_id, conn):
 Calculate the confident scores for Original Pep-Spec-Match
 Based on our scoring model
 """
-def calculate_conf_sc( search_results, spectra_peps, conn):
-    clusters = get_lib_rs_from_phoenix(search_results, conn)
+def calculate_conf_sc( search_results, spectra_peps, host):
+    clusters = get_lib_rs_from_phoenix(search_results, host)
     conf_scs = {}
     print("Calculating confident scores")
     for spec_title in search_results.keys():
@@ -182,9 +189,10 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
 """
 Get spectra identify data from identification table
 """       
-def get_spectra_pep(prj_id, conn):
+def get_spectra_pep(prj_id, host):
     id_table = "T_" + prj_id.upper() + "_PSM"
     sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE FROM " + id_table + ""
+    conn = get_conn(host)
     cursor = conn.cursor()
     cursor.execute(sql_str)
     spectra_rs = cursor.fetchall()
@@ -195,18 +203,21 @@ def get_spectra_pep(prj_id, conn):
         spectra_peps[spectra_title] = pep_seq
     print("got %d identified spectra"%(len(spectra_peps)))
     return spectra_peps
+    cursor.close()
+    conn.close()
 
 """
 Read cluster data from phoenix tables
 """
-def get_cluster_data(search_results, conn):
+def get_cluster_data(search_results, host):
     cluster_data = dict()
-
+    conn = get_conn(host)
     cursor = conn.cursor()
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
-        cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM \"" + cluster_table + "\" WHERE CLUSTER_ID = '" + cluster_id + "'"
+        cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
+        print(cluster_query_sql)
         cursor.execute(cluster_query_sql)
         result = cursor.fetchone()
         cluster = dict()
@@ -214,6 +225,7 @@ def get_cluster_data(search_results, conn):
         cluster['size'] = result[1]
         cluster_data[cluster_id] = cluster
     cursor.close() 
+    conn.close()
     return cluster_data
 
 """
@@ -221,8 +233,7 @@ Export search result of a project to phoenix/hbase table
 """
 def export_sr_to_phoenix(project_id, host, search_results):
 
-    database_url = 'http://' + host + ':8765/'
-    conn = phoenixdb.connect(database_url, autocommit=True)
+    conn = get_conn(host)
     cursor = conn.cursor()
     
     match_table_name = "T_" + project_id  + "spec_cluster_match" + time.strftime("%d%m%Y")
@@ -237,27 +248,28 @@ def export_sr_to_phoenix(project_id, host, search_results):
    
     #row = [cluster_id, pep_seq, conf_score, f_val, cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra]
 
-    spec_peps = get_spectra_pep(project_id, conn)
-    conf_sc_set = calculate_conf_sc(search_results, spec_peps, conn)
+    spec_peps = get_spectra_pep(project_id, host)
+    conf_sc_set = calculate_conf_sc(search_results, spec_peps, host)
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
-        dot = search_result.get('dot')
-        fval = search_result.get('fval')
-        conf_sc = conf_sc_set[spec_title]['conf_score']
+        dot = float(search_result.get('dot'))
+        fval = float(search_result.get('fval'))
+        conf_sc = float(conf_sc_set[spec_title]['conf_score'])
         cluster_id = search_result.get('lib_spec_id')
-        upsert_sql = "UPSERT INTO " + match_table_name + " VALUES (?, ?, ?, ?, ?)"
-        cursor.execute(upsert_sql, (spec_title, dot, fval, conf_sc, cluster_id))
+        upsert_sql = "UPSERT INTO " + match_table_name + " VALUES ('%s', %f, %f, %f, '%s')"%(spec_title, dot, fval, conf_sc, cluster_id)
+        print(upsert_sql)
 
+        cursor.execute(upsert_sql)
 
-    cluster_data = get_cluster_data(search_results, conn)
-    upsert_scored_psm_table(project_id, search_results,conf_sc_set, cluster_data, cursor)
-    
-
+    cluster_data = get_cluster_data(search_results, host)
+    upsert_scored_psm_table(project_id, search_results,conf_sc_set, cluster_data, host)
         
     cursor.close()
     conn.close()
 
-def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_data, cursor):
+def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_data, host):
+    conn = get_conn(host)
+    cursor = conn.cursor()
     spectra_matched_to_cluster = dict()
     unid_spec_matched_to_cluster = dict() #cluster_id as the key
     identified_spectra = retrieve_identification_from_phoenix(project_id, "localhost", None)
@@ -349,13 +361,15 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
                 cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra \
                 ))
             unid_row_num += 1
-
+    cursor.close()
+    conn.close()
+    
 """
 Get all matched cluster results from phoenix 
 """
-def get_lib_rs_from_phoenix(search_results, conn):
+def get_lib_rs_from_phoenix(search_results, host):
     lib_result = dict()
-    
+    conn = get_conn(host) 
     cursor = conn.cursor()
     clusters = dict()
     for spec_title in search_results.keys():
@@ -372,6 +386,7 @@ def get_lib_rs_from_phoenix(search_results, conn):
         cluster['seqs_ratios'] = rs[4]
         clusters[cluster_id] = cluster
     cursor.close()
+    conn.close()
     if len(clusters) < 1:
         raise Exception("Got empty cluster set for this search result")
     return(clusters)
@@ -491,8 +506,24 @@ def retrieve_identification_from_phoenix(project_id, host, output_file):
                 o.write(spec + "\t" + psms.get(spec)+ "\n")
     return psms
 
-retrieve_identification_from_phoenix("pxd000021", "localhost", "output.txt")
 
+def test_cluster_select():
+    host = "localhost"
+    database_url = 'http://' + host + ':8765/'
+    cluster_table = "V_CLUSTER"
+    cluster_id = "14b08180-051a-4dd7-8087-6095db2704b2"
+    conn = phoenixdb.connect(database_url, autocommit=True)
+    cursor = conn.cursor()
+    cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM \"" + cluster_table + "\" WHERE CLUSTER_ID = '" + cluster_id + "'"
+    print(cluster_query_sql)
+    cursor.execute(cluster_query_sql)
+    result = cursor.fetchone()
+    print( result[0])
+    print( result[1])
+
+
+#retrieve_identification_from_phoenix("pxd000021", "localhost", "output.txt")
+test_cluster_select()
 """
 project_id = 'test00002'
 host = 'localhost'

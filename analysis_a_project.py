@@ -7,6 +7,7 @@ import pymysql.cursors
 import sys, os
 import numpy as np
 import pandas as pd
+import logging 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 import retrieve_splib_result as retriever
@@ -232,7 +233,8 @@ def prepare_project_files(project_id):
 
     
 def main():
-
+    logging.basicConfig(filename='myapp.log', level=logging.DEBUG)
+    logging.info('Started')
     project_id = sys.argv[1]
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
@@ -249,6 +251,7 @@ def main():
     #write results and get intersection from two lists
     write_result_to_file(project_id, id_match_list, unid_match_list, qualified_clusters)    
 #    print_intersection(identified_n, id_final_spectra_n, id_final_spectra_n + unid_final_spectra_n)
+    logging.info('Finished')
 
 if __name__ == "__main__":
     main()
