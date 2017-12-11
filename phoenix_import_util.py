@@ -1,7 +1,11 @@
 import phoenixdb
 import time
 import math
-import sys,re,json
+import os,sys,re,json
+
+file_dir = os.path.dirname(__file__)
+sys.path.append(file_dir)
+import confident_score_calc as cf_calc 
 
 cluster_table = "V_CLUSTER"
 lib_spec_table = cluster_table + "_SPEC"
@@ -40,158 +44,13 @@ def get_seq_ratio(spectrum_pep, cluster_id, conn):
                         return this_seq_ratio
     return this_seq_ratio
 
-"""
-Calculate the confident scores for Original Pep-Spec-Match
-Based on our scoring model
-"""
-def calculate_conf_sc( search_results, spectra_peps, host):
-    clusters = get_lib_rs_from_phoenix(search_results, host)
-    conf_scs = {}
-    print("Calculating confident scores")
-    for spec_title in search_results.keys():
-        search_result = search_results.get(spec_title)
-        lib_spec_id = search_result.get('lib_spec_id')
-        dot = search_result.get('dot')
-        fval = search_result.get('fval')
-
-        cluster = clusters.get(lib_spec_id)
-        #todo comment it. this is only for debug
-        if cluster == None:
-            print("Warnning! Got null matched cluster for " + lib_spec_id)
-            continue
-        ratio = cluster.get('ratio')
-        n_spec = cluster.get('n_spec') 
-        seqs_ratios_str = cluster.get('seqs_ratios')
-
-        if n_spec > 1000:    #we assume n>=1000. the contribution of n_spec is al the same
-            cutted_n_spec = 1000
-        else :
-            cutted_n_spec = n_spec
-
-        spec_pep_str = spectra_peps.get(spec_title)
-        pep_seqs = list()
-        if spec_pep_str == None or spec_pep_str == "":
-            pep_seqs.append("RECOMMEND")
-#            raise  Exception("Got None peptide sequence for %s" % spec_title)
-        else:
-            spec_pep_str = spec_pep_str.replace("I","L") #replace acid I to L
-            spec_pep_str = spec_pep_str.replace("||", ",")
-            spec_pep_str = spec_pep_str.replace("|", ",")
-            spec_pep_str = spec_pep_str.rstrip()
-            pep_seqs = spec_pep_str.split(",")
-        seq_scores = list()
-        max_score = -1000000.0
-        max_score_seq = ""
-        for pep_seq in pep_seqs:
-            (seq_score,returned_pep_seq) = calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id)#the returned pep_seq could be recommend sequence for the non identified spectrum
-            if seq_score > max_score:
-                max_score = seq_score
-                max_score_seq = returned_pep_seq
-            seq_scores.append(seq_score)
-        if len(pep_seqs)>1:
-            print("This spectrum has multiple PSMs, we chose the max score %f for %s"%(max_score, max_score_seq))
-        conf_scs[spec_title] = {"conf_score":max_score, "recommend_pep_seq":max_score_seq}
-    return conf_scs
-
-def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id):
-    # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
-    normalized_n_spec = math.log(n_spec)/math.log(1000)
-    no_pre_identification = False
-    # allUpper = re.compile(r'^[A-Z]')
-    # if allUpper.match(spectrum_pep):
-    allUpper = re.compile(r'[^A-Z]')
-    if allUpper.match(pep_seq):
-        print(allUpper.match(pep_seq))
-        raise Exception("Peptide sequence is not all upper case letter: " + pep_seq)\
-
-    #transfer the string to standard json string
-    seqs_ratios_str = seqs_ratios_str.replace("'","\"")
-    seqs_ratios_str = seqs_ratios_str.replace(": ",": \"")
-    seqs_ratios_str = seqs_ratios_str.replace(",","\",")
-    seqs_ratios_str = seqs_ratios_str.replace("}","\"}")
-    seqs_ratios = json.loads(seqs_ratios_str)
-
-
-    this_seq_ratio = 0.0
-    max_seq_ratio = 0.0
-    max_seq = ""
-    other_ratios = dict()
-    for seq in seqs_ratios.keys():
-        other_ratios[seq] = float(seqs_ratios.get(seq))
-        if other_ratios[seq] > max_seq_ratio:
-            max_seq_ratio = float(other_ratios[seq])
-            max_seq = seq
-
-    if max_seq_ratio > ratio + 0.01 or max_seq_ratio < ratio - 0.01:
-        raise Exception("The max-seq_ratio is not equal to the ratio in database with cluster %s : %s, %f"%(lib_spec_id, seqs_ratios_str, ratio))
-
-    try:
-        if pep_seq == "RECOMMEND":
-            pep_seq = max_seq
-            no_pre_identification = True
-        this_seq_ratio = seqs_ratios.get(pep_seq)
-        other_ratios.pop(pep_seq)
-    except KeyError as ex:
-#            print("No such key: '%s'" % ex)
-        #assign a new ratio for this seq, and adjust the others
-        if this_seq_ratio ==None or this_seq_ratio == "":
-            this_seq_ratio = 1.0/(n_spec + 1)
-            adjust_factor = n_spec/(n_spec + 1.0)
-            for akey in other_ratios.keys():
-                other_ratios[akey] *= adjust_factor
-        #raise Exception("Got None ratio for this peptide sequence %s from seqs_ratios %s in cluster %s" % (pep_seq, seqs_ratios_str, lib_spec_id))
-
-    this_seq_ratio = float(this_seq_ratio)
-
-    #some time, multiple sequences could be assigned to one spectrum, cause a sum of ratios more than 1.
-    #for this situation, we pick the other ratios from small to big, to make a set of ratios to "1".
-    #here we modified the other_ratios list
-    sum_ratio = 0.0
-    for temp_value in seqs_ratios.values():
-        sum_ratio += float(temp_value)
-    if sum_ratio > 1.001:
-        new_other_ratios = dict()
-        max_sum_others = 1 - this_seq_ratio
-        i = 0
-        # print("sum of all ratios: " + str(sum_ratio))
-        print(other_ratios)
-        if max_sum_others > 0:
-            for temp_ratio in sorted(other_ratios.values()):
-                if sum(new_other_ratios.values()) < max_sum_others:
-                    new_other_ratios[str(i)] = temp_ratio
-                    # print("add a new ratio " + str(temp_ratio))
-                    i += 1
-            offset = sum(new_other_ratios.values()) - max_sum_others
-            # print("offset is" + str(offset))
-            new_other_ratios[str(len(new_other_ratios)-1)] -= offset
-            other_ratios = new_other_ratios
-
-    sum_sqr_of_others = 0.0
-    for other_ratio in other_ratios.values():
-        sum_sqr_of_others += pow(other_ratio,2)
-    sqrt_of_others = math.sqrt(sum_sqr_of_others)
-    confident_score = normalized_n_spec * (this_seq_ratio - sqrt_of_others)
-#        print("conf_sc %f for pep seq %s in cluster %s " % (confident_score, pep_seq, lib_spec_id))
-#        print("normalized_n_spec %f * (this_seq_ratio %f - sqrt_of_others %f)" % (normalized_n_spec , this_seq_ratio , sqrt_of_others))
-    if this_seq_ratio ==  0.5 and confident_score == 0:  #
-        confident_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
-
-    if no_pre_identification:
-        pep_seq = "R_NEW_" + pep_seq
-    else:
-        if confident_score < 0 and max_seq_ratio > 0.5:
-            pep_seq = "R_Better_" + max_seq
-        else:
-            pep_seq = "PRE_" + pep_seq
-    return (confident_score, pep_seq)
-
 
 """
 Get spectra identify data from identification table
 """       
 def get_spectra_pep(prj_id, host):
     id_table = "T_" + prj_id.upper() + "_PSM"
-    sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE FROM " + id_table + ""
+    sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE, MODIFICATIONS FROM " + id_table + ""
     conn = get_conn(host)
     cursor = conn.cursor()
     cursor.execute(sql_str)
@@ -200,7 +59,8 @@ def get_spectra_pep(prj_id, host):
     for r in spectra_rs:
         spectra_title = r[0]
         pep_seq = r[1]
-        spectra_peps[spectra_title] = pep_seq
+        mod_seq = r[2]
+        spectra_peps[spectra_title] = {"seq":pep_seq, "mods":mod_seq}
     print("got %d identified spectra"%(len(spectra_peps)))
     return spectra_peps
     cursor.close()
@@ -217,7 +77,7 @@ def get_cluster_data(search_results, host):
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
         cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
-        print(cluster_query_sql)
+        # print(cluster_query_sql)
         cursor.execute(cluster_query_sql)
         result = cursor.fetchone()
         cluster = dict()
@@ -249,7 +109,8 @@ def export_sr_to_phoenix(project_id, host, search_results):
     #row = [cluster_id, pep_seq, conf_score, f_val, cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra]
 
     spec_peps = get_spectra_pep(project_id, host)
-    conf_sc_set = calculate_conf_sc(search_results, spec_peps, host)
+    conf_sc_set = cf_calc.calculate_conf_sc(search_results, spec_peps, host)
+    print(str(conf_sc_set))
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         dot = float(search_result.get('dot'))
@@ -257,7 +118,7 @@ def export_sr_to_phoenix(project_id, host, search_results):
         conf_sc = float(conf_sc_set[spec_title]['conf_score'])
         cluster_id = search_result.get('lib_spec_id')
         upsert_sql = "UPSERT INTO " + match_table_name + " VALUES ('%s', %f, %f, %f, '%s')"%(spec_title, dot, fval, conf_sc, cluster_id)
-        print(upsert_sql)
+        # print(upsert_sql)
 
         cursor.execute(upsert_sql)
 
@@ -283,6 +144,7 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
                        "cluster_ratio FLOAT, "   + \
                        "cluster_size INTEGER, "   + \
                        "recommend_pep VARCHAR, " + \
+                       "recommend_mods VARCHAR, " + \
                        "num_spec INTEGER, " + \
                        "spectra VARCHAR " + \
                        ")"
@@ -297,6 +159,7 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
                        "cluster_ratio FLOAT, "   + \
                        "cluster_size INTEGER, "   + \
                        "recommend_pep VARCHAR, " + \
+                       "recommend_mods VARCHAR, " + \
                        "num_spec INTEGER, " + \
                        "spectra VARCHAR " + \
                        ")"
@@ -332,14 +195,15 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
             num_spec = len(pep_spectra)
             spectra = "||".join(pep_spectra)
             recommend_pep_seq = conf_sc_set.get(spec1).get('recommend_pep_seq')
+            recommend_mods = conf_sc_set.get(spec1).get('recommend_mods')
             cluster = cluster_data.get(cluster_id)
             cluster_ratio = cluster.get('ratio')
             cluster_size = cluster.get('size')
             
-            upsert_sql = "UPSERT INTO " + scored_psm_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            upsert_sql = "UPSERT INTO " + scored_psm_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             cursor.execute(upsert_sql, ( \
                 id_row_num, cluster_id, pep_seq, conf_score, f_val, \
-                cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra \
+                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra \
             ))
             # print("upsert pep seq %s in cluster %s, with spectra:%s"%(pep_seq, cluster_id, spectra))
             id_row_num += 1
@@ -352,13 +216,14 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
             num_spec = len(matched_unid_spec )
             spectra = "||".join(matched_unid_spec )
             recommend_pep_seq = conf_sc_set.get(spec1).get('recommend_pep_seq')
+            recommend_mods = conf_sc_set.get(spec1).get('recommend_mods')
             cluster = cluster_data.get(cluster_id)
             cluster_ratio = cluster.get('ratio')
             cluster_size = cluster.get('size')
-            upsert_sql = "UPSERT INTO " + recom_pep_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            upsert_sql = "UPSERT INTO " + recom_pep_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             cursor.execute(upsert_sql, ( \
                 unid_row_num, cluster_id, conf_score, f_val, \
-                cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra \
+                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra \
                 ))
             unid_row_num += 1
     cursor.close()
@@ -375,7 +240,7 @@ def get_lib_rs_from_phoenix(search_results, host):
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
-        sql_str = "SELECT CLUSTER_RATIO, N_SPEC, N_ID_SPEC, N_UNID_SPEC, SEQUENCES_RATIOS from \"" + cluster_table +"\" WHERE CLUSTER_ID = '" + cluster_id + "'"
+        sql_str = "SELECT CLUSTER_RATIO, N_SPEC, N_ID_SPEC, N_UNID_SPEC, SEQUENCES_RATIOS, SEQUENCES_MODS from \"" + cluster_table +"\" WHERE CLUSTER_ID = '" + cluster_id + "'"
         cursor.execute(sql_str)
         rs = cursor.fetchone()
         if rs == None:
@@ -384,6 +249,7 @@ def get_lib_rs_from_phoenix(search_results, host):
         cluster['ratio'] = rs[0]
         cluster['n_spec'] = rs[1]
         cluster['seqs_ratios'] = rs[4]
+        cluster['seqs_mods'] = rs[5]
         clusters[cluster_id] = cluster
     cursor.close()
     conn.close()
@@ -515,7 +381,7 @@ def test_cluster_select():
     conn = phoenixdb.connect(database_url, autocommit=True)
     cursor = conn.cursor()
     cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM \"" + cluster_table + "\" WHERE CLUSTER_ID = '" + cluster_id + "'"
-    print(cluster_query_sql)
+    # print(cluster_query_sql)
     cursor.execute(cluster_query_sql)
     result = cursor.fetchone()
     print( result[0])

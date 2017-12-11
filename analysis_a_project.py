@@ -5,7 +5,6 @@ This program get the fainal statitical analysis on the library searched result o
 
 import pymysql.cursors
 import sys, os
-import numpy as np
 import pandas as pd
 import logging 
 file_dir = os.path.dirname(__file__)
@@ -15,7 +14,7 @@ import retrieve_splib_result as retriever
 import phoenix_import_util as phoenix 
 
 def get_connection(mysql_host):
-    #build the connection
+    #build the connection to mysql database, deprected
     connection = pymysql.connect(host=mysql_host,
                             user='pride_cluster_t',
                             password='pride123',
@@ -93,9 +92,6 @@ def get_spec_lib_match_from_file(project_id):
     print("[ %.1f   [ %.1f | %.1f ]  %.1f ]"%(identified_out, identified_in, lib_match_in, lib_match_out))
     """
     return(len(identified_spectra), id_matchs, unid_matchs)
-
-
-
 
 
 """
@@ -233,7 +229,7 @@ def prepare_project_files(project_id):
 
     
 def main():
-    logging.basicConfig(filename='myapp.log', level=logging.DEBUG)
+    logging.basicConfig(filename='myapp.log', level=logging.INFO)
     logging.info('Started')
     project_id = sys.argv[1]
     if project_id == None:
