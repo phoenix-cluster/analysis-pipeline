@@ -96,12 +96,13 @@ def export_sr_to_phoenix(project_id, host, search_results):
     conn = get_conn(host)
     cursor = conn.cursor()
     
-    match_table_name = "T_" + project_id  + "spec_cluster_match" + time.strftime("%d%m%Y")
+    match_table_name = "T_" + project_id  + "_spec_cluster_match_" + time.strftime("%Y%m%d")
     create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + match_table_name.upper() + "\" (" + \
              "spec_title VARCHAR NOT NULL PRIMARY KEY ," + \
              "dot FLOAT ,"   + \
              "f_val FLOAT, "  + \
              "conf_sc FLOAT, "  + \
+             "recomm_seq_sc FLOAT, "  + \
              "cluster_id VARCHAR "   + \
              ")"
     cursor.execute(create_table_sql)
@@ -110,14 +111,16 @@ def export_sr_to_phoenix(project_id, host, search_results):
 
     spec_peps = get_spectra_pep(project_id, host)
     conf_sc_set = cf_calc.calculate_conf_sc(search_results, spec_peps, host)
-    print(str(conf_sc_set))
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         dot = float(search_result.get('dot'))
         fval = float(search_result.get('fval'))
         conf_sc = float(conf_sc_set[spec_title]['conf_score'])
+        recomm_seq_sc = -1.0
+        if conf_sc_set[spec_title]['recomm_seq_score'] :
+            recomm_seq_sc = float(conf_sc_set[spec_title]['recomm_seq_score'])
         cluster_id = search_result.get('lib_spec_id')
-        upsert_sql = "UPSERT INTO " + match_table_name + " VALUES ('%s', %f, %f, %f, '%s')"%(spec_title, dot, fval, conf_sc, cluster_id)
+        upsert_sql = "UPSERT INTO " + match_table_name + " VALUES ('%s', %f, %f, %f, %f, '%s')"%(spec_title, dot, fval, conf_sc, recomm_seq_sc, cluster_id)
         # print(upsert_sql)
 
         cursor.execute(upsert_sql)
@@ -139,14 +142,17 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
                        "id INTEGER NOT NULL PRIMARY KEY," + \
                        "cluster_id VARCHAR, "   + \
                        "pep_seq VARCHAR, "   + \
+                       "pep_mods VARCHAR, "   + \
                        "conf_sc FLOAT, "  + \
+                       "recomm_seq_sc FLOAT, "  + \
                        "f_val FLOAT, "  + \
                        "cluster_ratio FLOAT, "   + \
                        "cluster_size INTEGER, "   + \
                        "recommend_pep VARCHAR, " + \
                        "recommend_mods VARCHAR, " + \
                        "num_spec INTEGER, " + \
-                       "spectra VARCHAR " + \
+                       "spectra VARCHAR, " + \
+                       "acceptance INTEGER" + \
                        ")"
     cursor.execute(create_table_sql)
 
@@ -161,7 +167,8 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
                        "recommend_pep VARCHAR, " + \
                        "recommend_mods VARCHAR, " + \
                        "num_spec INTEGER, " + \
-                       "spectra VARCHAR " + \
+                       "spectra VARCHAR, " + \
+                       "acceptance INTEGER" + \
                        ")"
     cursor.execute(create_table_sql)
 
@@ -177,20 +184,28 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
         matched_spectra = spectra_matched_to_cluster.get(cluster_id,[])
         matched_peptides = dict()
         for matched_spec in matched_spectra:
-            pep_seq = identified_spectra.get(matched_spec,None)
-            if pep_seq:
-                pep_spectra = matched_peptides.get(pep_seq,[])
+            pep_seq_data = identified_spectra.get(matched_spec,None)
+            if pep_seq_data:
+                pep_seq_data_str = pep_seq_data.get('id_seq')
+                if pep_seq_data.get('id_mods') != None:
+                    pep_seq_data_str += "||" + pep_seq_data.get('id_mods')
+                pep_spectra = matched_peptides.get(pep_seq_data_str,[])
                 pep_spectra.append(matched_spec)
-                matched_peptides[pep_seq] = pep_spectra
+                matched_peptides[pep_seq_data_str] = pep_spectra
             else:
                 matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id,[])
                 matched_unid_spec.append(matched_spec)
                 unid_spec_matched_to_cluster[cluster_id] = matched_unid_spec
         # print("got %d pep_seq for cluster %s"%(len(matched_peptides), cluster_id))
-        for pep_seq in matched_peptides.keys():
-            pep_spectra = matched_peptides.get(pep_seq,[])
+        #print(conf_sc_set)
+        for pep_seq_data_str in matched_peptides.keys():
+            pep_spectra = matched_peptides.get(pep_seq_data_str,[])
             spec1 = pep_spectra[0] #get the first spec in list
             conf_score = conf_sc_set.get(spec1).get('conf_score')
+            recomm_seq_sc = -1.0
+            if conf_sc_set.get(spec1).get('recomm_seq_score'):
+                recomm_seq_sc = float(conf_sc_set.get(spec1).get('recomm_seq_score'))
+            print(recomm_seq_sc)
             f_val = float(search_results.get(spec1).get('fval'))
             num_spec = len(pep_spectra)
             spectra = "||".join(pep_spectra)
@@ -199,12 +214,18 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
             cluster = cluster_data.get(cluster_id)
             cluster_ratio = cluster.get('ratio')
             cluster_size = cluster.get('size')
-            
-            upsert_sql = "UPSERT INTO " + scored_psm_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
+            pep_seq_data = pep_seq_data_str.split("||")
+            pep_seq =  pep_seq_data[0]
+            pep_mods = ""
+            if len(pep_seq_data) > 1:
+                pep_mods = pep_seq_data[1]
+            upsert_sql = "UPSERT INTO " + scored_psm_table_name.upper() + " VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             cursor.execute(upsert_sql, ( \
-                id_row_num, cluster_id, pep_seq, conf_score, f_val, \
-                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra \
+                id_row_num, cluster_id, pep_seq, pep_mods, conf_score, recomm_seq_sc, f_val, \
+                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra, 0\
             ))
+            print(upsert_sql)
             # print("upsert pep seq %s in cluster %s, with spectra:%s"%(pep_seq, cluster_id, spectra))
             id_row_num += 1
 
@@ -220,10 +241,10 @@ def upsert_scored_psm_table(project_id, search_results, conf_sc_set, cluster_dat
             cluster = cluster_data.get(cluster_id)
             cluster_ratio = cluster.get('ratio')
             cluster_size = cluster.get('size')
-            upsert_sql = "UPSERT INTO " + recom_pep_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            upsert_sql = "UPSERT INTO " + recom_pep_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             cursor.execute(upsert_sql, ( \
                 unid_row_num, cluster_id, conf_score, f_val, \
-                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra \
+                cluster_ratio, cluster_size, recommend_pep_seq, recommend_mods, num_spec, spectra, 0\
                 ))
             unid_row_num += 1
     cursor.close()
@@ -353,13 +374,14 @@ def retrieve_identification_from_phoenix(project_id, host, output_file):
     psms = dict()    
     offset = 0 
     while(offset < total_n):
-        sql_str = "SELECT SPECTRUM_TITLE,PEPTIDE_SEQUENCE FROM " + table_name + " LIMIT 5000 OFFSET " + str(offset)
+        sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE, MODIFICATIONS FROM " + table_name + " LIMIT 5000 OFFSET " + str(offset)
         cursor.execute(sql_str)
         rs = cursor.fetchall()
         for r in rs:
             spec_title = r[0]
             id_seq = r[1]
-            psms[spec_title] = id_seq
+            id_mods = r[2]
+            psms[spec_title] = {'id_seq':id_seq, 'id_mods':id_mods}
         offset += 5000
 
     cursor.close()

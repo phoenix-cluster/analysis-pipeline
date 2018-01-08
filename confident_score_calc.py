@@ -71,21 +71,24 @@ def calculate_conf_sc(search_results, spectra_peps, host):
                 if len(pep_seqs) != len(mod_seqs):
                     print("Error! length of pep_seqs != length of mod_seqs")
                     os.exit(1)
-        seq_scores = list()
+        # seq_scores = list()
         max_score = -1000000.0
         max_score_seq = ""
         for pep_seq in pep_seqs:
-            (seq_score,returned_pep_seq) = calculate_conf_sc_for_a_seq(pep_seq, cutted_n_spec, seqs_ratios_str, ratio, lib_spec_id)#the returned pep_seq could be recommend sequence for the non identified spectrum
+            (seq_score,returned_pep_seq, recomm_seq_score) = calculate_conf_sc_for_a_seq(pep_seq, cutted_n_spec, seqs_ratios_str, ratio, lib_spec_id)#the returned pep_seq could be recommend sequence for the non identified spectrum
             if seq_score > max_score:
                 max_score = seq_score
+                accpeted_recomm_seq_score = recomm_seq_score
                 max_score_seq = returned_pep_seq
-            seq_scores.append(seq_score)
+            # seq_scores.append(seq_score)
+        # if accpeted_recomm_seq_score:
+        #     print("accepted_recomm_seq_score of seq : " + max_score_seq + " is " + str(accpeted_recomm_seq_score))
         if len(pep_seqs)>1:
             print("This spectrum has multiple PSMs, we chose the max score %f for %s"%(max_score, max_score_seq))
         try:
             mod_seq = ""
             if max_score_seq.startswith("R_NEW_") or max_score_seq.startswith("R_Better"):
-                clean_seq = max_score_seq.replace("R_NEW_","").replace("R_Better","")
+                clean_seq = max_score_seq.replace("R_NEW_","").replace("R_Better_","")
                 seqs_mods_str = cluster.get('seqs_mods')
                 seq_mods_map = get_dict_from_string(seqs_mods_str)
                 seq_mods_map2 = dict()
@@ -96,17 +99,21 @@ def calculate_conf_sc(search_results, spectra_peps, host):
             if max_score_seq.startswith("PRE_"):    
                 clean_seq = max_score_seq.replace("PRE_","")
                 seq_index = pep_seqs.index(clean_seq)
-                if len(mod_seqs):
+                if len(mod_seqs) > seq_index:
                     mod_seq = mod_seqs[seq_index]
-            conf_scs[spec_title] = {"conf_score":max_score, "recommend_pep_seq":max_score_seq, "recommend_mods":mod_seq}
+            conf_scs[spec_title] = {"conf_score":max_score, "recommend_pep_seq":max_score_seq, "recommend_mods":mod_seq,
+                                    "recomm_seq_score": accpeted_recomm_seq_score}
         except Exception as ex:
             traceback.print_exc()
             print(ex)
             print(str(pep_seqs))
             print(str(spec_data))
             exit(1)
+
+    print(conf_scs)
     return conf_scs
 
+#calculate a pep_seq's confident score, if recommend a new pep seq, return it's score too
 def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id):
     # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
     normalized_n_spec = math.log(n_spec)/math.log(1000)
@@ -136,6 +143,7 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
             max_seq_ratio = float(other_ratios[seq])
             max_seq = seq
 
+    other_ratios_2 = other_ratios
     if max_seq_ratio > ratio + 0.01 or max_seq_ratio < ratio - 0.01:
         raise Exception("The max-seq_ratio is not equal to the ratio in database with cluster %s : %s, %f"%(lib_spec_id, seqs_ratios_str, ratio))
 
@@ -168,7 +176,7 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
         max_sum_others = 1 - this_seq_ratio
         i = 0
         # print("sum of all ratios: " + str(sum_ratio))
-        print(other_ratios)
+        #print(other_ratios)
         if max_sum_others > 0:
             for temp_ratio in sorted(other_ratios.values()):
                 if sum(new_other_ratios.values()) < max_sum_others:
@@ -189,12 +197,19 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
 #        print("normalized_n_spec %f * (this_seq_ratio %f - sqrt_of_others %f)" % (normalized_n_spec , this_seq_ratio , sqrt_of_others))
     if this_seq_ratio ==  0.5 and confident_score == 0:  #
         confident_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
-
+    better_confident_score = None
     if no_pre_identification:
         pep_seq = "R_NEW_" + pep_seq
     else:
         if confident_score < 0 and max_seq_ratio > 0.5:
+            ##recommend a new seq, and calculate it's conf score
+            other_ratios_2.pop(max_seq)
             pep_seq = "R_Better_" + max_seq
+            sum_sqr_of_others = 0.0
+            for other_ratio in other_ratios_2.values():
+                sum_sqr_of_others += pow(other_ratio,2)
+            sqrt_of_others = math.sqrt(sum_sqr_of_others)
+            better_confident_score = normalized_n_spec * (max_seq_ratio - sqrt_of_others)
         else:
             pep_seq = "PRE_" + pep_seq
-    return (confident_score, pep_seq)
+    return (confident_score, pep_seq, better_confident_score)

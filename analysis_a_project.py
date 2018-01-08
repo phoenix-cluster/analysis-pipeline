@@ -222,8 +222,9 @@ def prepare_project_files(project_id):
     if os.path.isfile(id_output_file) and os.path.getsize(id_output_file)>1000:
         print("%s is already there."%(id_output_file))
     else:
+        pass
         #id_retriever.process(input_path, id_output_file)  #removed because the idenfications are nolonger in mgf files, but from pride xml files
-        phoenix.retrieve_identification_from_phoenix(project_id, "localhost", id_output_file)
+        #todo need to be uncomment    phoenix.retrieve_identification_from_phoenix(project_id, "localhost", id_output_file)
 
     retriever.process(project_id, input_path, libmatch_output_file)
 
