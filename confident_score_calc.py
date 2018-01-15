@@ -110,7 +110,7 @@ def calculate_conf_sc(search_results, spectra_peps, host):
             print(str(spec_data))
             exit(1)
 
-    print(conf_scs)
+    # print(conf_scs)
     return conf_scs
 
 #calculate a pep_seq's confident score, if recommend a new pep seq, return it's score too
@@ -203,7 +203,11 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
     else:
         if confident_score < 0 and max_seq_ratio > 0.5:
             ##recommend a new seq, and calculate it's conf score
-            other_ratios_2.pop(max_seq)
+            try:
+                other_ratios_2.pop(max_seq)
+            except KeyError as ex:
+                print("max_seq: %s"%(max_seq))
+                print("other_ratios_2: %s"%(str(other_ratios_2)))
             pep_seq = "R_Better_" + max_seq
             sum_sqr_of_others = 0.0
             for other_ratio in other_ratios_2.values():

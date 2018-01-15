@@ -1,28 +1,12 @@
 #!/usr/bin/python3
 """ retrieve_splib_result.py
 
-This tool get the target spectra and search hits from the spectra library, and export them to file or Phoenix/HBase table. 
+This library get the target spectra and search hits from the spectra library, and export them to file or Phoenix/HBase table.
 The library is built from the PRIDE Cluster consensus spectra without identified information to use.
 
-Usage:
-  retrieve_splib_result.py --input=<results.pep.xml> [--output=<output_file>  --project=<project_id>]
-  retrieve_splib_result.py (--help | --version)
-
-Options:
-  -i, --input=<results.pep.xml>        Path to the result .pep.xml file to process, could be a directory or pep.xml file
-  --output =[output file name]         Output file for storing the spectra library search result in tabular format.
-  --project =[project id]              Searching results come from a project.
-  -h, --help                           Print this help message.
-  -v, --version                        Print the current version.
-
 """
-import sys
 import os
-from docopt import docopt
 import xml.etree.ElementTree as ET
-import phoenixdb
-import time 
-import phoenix_import_util as phoenix_writer
 
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
@@ -77,7 +61,7 @@ def write_to_file(output_file, search_results):
 """
 retrive the results and write to output_file or phoenix database
 """
-def retrieve_file(project_id, output_file, pepxml_path, title_map):
+def retrieve_file(project_id, pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
     tree = ET.parse(pepxml_path)
     root = tree.getroot()
@@ -116,7 +100,6 @@ def retrieve_file(project_id, output_file, pepxml_path, title_map):
                 search_scores[score_name] = score_value 
         search_results[spectrum] = search_scores
         
-    write_to_file(output_file, search_results)
     print("Retrieving of " + pepxml_path + " is done.")
     print("Totally " + str(count) + "spectra have been imported from this file.")
     return search_results
@@ -130,40 +113,47 @@ def write_head_to_file(output_file):
 
 
 """
-process the spec_cluster match results, persisit them in file or phoenix_db
+retrieve the spec_cluster match results and persist them into the tab file
 """
-def process(project_id, input_path, output_file):
-    print("start to process the spec_cluster match results, persisit them in file or phoenix_db")
-    write_head_to_file(output_file)
+def retrive_and_persist_to_file(project_id, output_to_file_flag = False):
+    input_path = project_id + '/'
+    output_file = project_id + '/lib_search_result.tab'
+
+    print("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
+    if output_to_file_flag:
+        write_head_to_file(output_file)
     search_results = {}
     
     if os.path.isfile(input_path):
         mzML_path = remove_pepxml_ext(input_path) + "mzML"
         title_map = get_spec_title(mzML_path)
-        search_results_of_file = retrieve_file(project_id, output_file, input_path, title_map)
+        search_results_of_file = retrieve_file(project_id, input_path, title_map)
+        if output_to_file_flag:
+            write_to_file(output_file, search_results_of_file)
     else:
     	for file in os.listdir(input_path):
             if not file.lower().endswith('.pep.xml'):
                 continue
             mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
             title_map = get_spec_title(mzML_path)
-            search_results_of_file = retrieve_file(project_id, output_file, input_path + "/" + file, title_map)
+            search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
+            if output_to_file_flag:
+                write_to_file(output_file, search_results_of_file)
             search_results.update(search_results_of_file)
+    return search_results
 
-    phoenix_writer.export_sr_to_phoenix(project_id, "localhost", search_results)
-
-def main():
-    arguments = docopt(__doc__, version='retrieve_splib_result.py 1.0 BETA')
-    input_path = arguments['--input'] or arguments['-i']
-    
-    table_name = "test_spec_lib_search_result_1"
-    
-    output_file = 'lib_search_result.tab'
-    if arguments['--output']:
-        output_file = arguments['--output']
-    
-    process(project_id, input_path, output_file)
-
-
-if __name__ == "__main__":
-    main()
+# def main():
+#     arguments = docopt(__doc__, version='retrieve_splib_result.py 1.0 BETA')
+#     input_path = arguments['--input'] or arguments['-i']
+#
+#     table_name = "test_spec_lib_search_result_1"
+#
+#     output_file = 'lib_search_result.tab'
+#     if arguments['--output']:
+#         output_file = arguments['--output']
+#
+#     process(project_id, input_path, output_file)
+#
+#
+# if __name__ == "__main__":
+#     main()

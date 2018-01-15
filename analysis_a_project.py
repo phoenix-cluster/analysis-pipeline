@@ -6,12 +6,14 @@ This program get the fainal statitical analysis on the library searched result o
 import pymysql.cursors
 import sys, os
 import pandas as pd
-import logging 
+import logging
+import time
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 import retrieve_splib_result as retriever
 #import identi_data_to_file as id_retriever
-import phoenix_import_util as phoenix 
+import phoenix_import_util as phoenix
+import statistics_util as stat_util
 
 def get_connection(mysql_host):
     #build the connection to mysql database, deprected
@@ -138,9 +140,8 @@ def write_qualified_clusters(connection):
             ratio = result.get('cluster_ratio')
             o.write("%s\t%s\t%s\n"%(cluster_id, n_spec, ratio))
 
-def get_qualified_clusters_from_file():
+def get_qualified_clusters_from_file(size_threshold):
 #    ratio_threshold = 0.618
-    size_threshold = 5
     cluster_list_file = "/home/ubuntu/mingze/spec_lib_searching/phospho/cluster_list_%d.tab"%(size_threshold)
     
     cluster_in_list = list()
@@ -168,7 +169,7 @@ def get_final(spectra_match_list, scannum_cluster_map, qualified_clusters):
         print("%s\t%s\t%s"%(spectrum, matched_cluster, qualified_clusters[matched_cluster]))
     return(final_list)
 """
-def write_result_to_file(project_id, id_match_list, unid_match_list, qualified_clusters):
+def write_filtered_result_to_file(project_id, id_match_list, unid_match_list, qualified_clusters):
     id_result_file = project_id + '/result_id.tab'
     unid_result_file = project_id + '/result_unid.tab'
     indexed_clusters = qualified_clusters.set_index('cluster_id')
@@ -209,44 +210,62 @@ def prepare_shared_files():
 #    write_scannum_cluster_map_to_file(connection)
     write_qualified_clusters(connection)
 
-
 """
-prepare the lib_search_result.tab and identified_spectra.tab file for each project,
-for the next step analysis
+generate the identified_spectra.tab file for each project,
 """
-def prepare_project_files(project_id):
-    input_path = project_id + '/'
-    libmatch_output_file = project_id + '/lib_search_result.tab'
+def generate_id_files(project_id):
     id_output_file = project_id + '/identified_spectra.tab'
 
     if os.path.isfile(id_output_file) and os.path.getsize(id_output_file)>1000:
         print("%s is already there."%(id_output_file))
     else:
-        pass
         #id_retriever.process(input_path, id_output_file)  #removed because the idenfications are nolonger in mgf files, but from pride xml files
-        #todo need to be uncomment    phoenix.retrieve_identification_from_phoenix(project_id, "localhost", id_output_file)
+        phoenix.retrieve_identification_from_phoenix(project_id, "localhost", id_output_file)
 
-    retriever.process(project_id, input_path, libmatch_output_file)
 
-    
+"""
+retrieve the search results and 
+generate the lib_search_result.tab file for each project,
+for the next step analysis
+"""
+def generate_lib_search_result_files(project_id):
+    lib_search_results = retriever.retrive_and_persist_to_file(project_id) #retrieve the library search results and export them to file/phoenix db
+    return lib_search_results
+
 def main():
     logging.basicConfig(filename='myapp.log', level=logging.INFO)
     logging.info('Started')
     project_id = sys.argv[1]
+    host = "localhost"
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
     print("Start to calculate project: " + project_id)
 
-    prepare_shared_files()
-    prepare_project_files(project_id)
-    #get all library matched and identified spectra 
-    (identified_n, id_match_list, unid_match_list) = get_spec_lib_match_from_file(project_id)
+    # prepare_shared_files()
+    generate_id_files(project_id)
+    lib_search_results = generate_lib_search_result_files(project_id)
+    identified_spectra = phoenix.retrieve_identification_from_phoenix(project_id, host, None)
+    cluster_data = phoenix.get_cluster_data(lib_search_results, host)
+
+    #persisit them in file or phoenix_db
+    phoenix.export_sr_to_phoenix(project_id, lib_search_results, identified_spectra, cluster_data, host)
+
+    date = time.strftime("%Y%m%d")
+    thresholds = stat_util.default_threshods
+    stat_util.set_threshold(project_id, thresholds, date, host)
+    statistics_results = stat_util.get_statistics_data(project_id, host)
+    print(statistics_results)
+
+
+    #get all library matched and identified spectra
+    # (identified_n, id_match_list, unid_match_list) = get_spec_lib_match_from_file(project_id)
     
     #get all clusters whose size >=5
-    qualified_clusters = get_qualified_clusters_from_file()
+    # size_threshold = 5
+    # qualified_clusters = get_qualified_clusters_from_file(size_threshold)
 
     #write results and get intersection from two lists
-    write_result_to_file(project_id, id_match_list, unid_match_list, qualified_clusters)    
+    # write_filtered_result_to_file(project_id, id_match_list, unid_match_list, qualified_clusters)
 #    print_intersection(identified_n, id_final_spectra_n, id_final_spectra_n + unid_final_spectra_n)
     logging.info('Finished')
 
