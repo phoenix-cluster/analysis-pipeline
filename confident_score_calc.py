@@ -25,13 +25,13 @@ def get_dict_from_string(str):
 
 
 """
-Calculate the confident scores for Original Pep-Spec-Match
+Calculate the confidence scores for Original Pep-Spec-Match
 Based on our scoring model
 """
 def calculate_conf_sc(search_results, spectra_peps, host):
     clusters = phoenix.get_lib_rs_from_phoenix(search_results, host)
     conf_scs = {}
-    print("Calculating confident scores")
+    print("Calculating confidence scores")
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         lib_spec_id = search_result.get('lib_spec_id')
@@ -113,7 +113,7 @@ def calculate_conf_sc(search_results, spectra_peps, host):
     # print(conf_scs)
     return conf_scs
 
-#calculate a pep_seq's confident score, if recommend a new pep seq, return it's score too
+#calculate a pep_seq's confidence score, if recommend a new pep seq, return it's score too
 def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id):
     # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
     normalized_n_spec = math.log(n_spec)/math.log(1000)
@@ -192,16 +192,17 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
     for other_ratio in other_ratios.values():
         sum_sqr_of_others += pow(other_ratio,2)
     sqrt_of_others = math.sqrt(sum_sqr_of_others)
-    confident_score = normalized_n_spec * (this_seq_ratio - sqrt_of_others)
-#        print("conf_sc %f for pep seq %s in cluster %s " % (confident_score, pep_seq, lib_spec_id))
+    confidence_score = normalized_n_spec * (this_seq_ratio - sqrt_of_others)
+#        print("conf_sc %f for pep seq %s in cluster %s " % (confidence_score, pep_seq, lib_spec_id))
 #        print("normalized_n_spec %f * (this_seq_ratio %f - sqrt_of_others %f)" % (normalized_n_spec , this_seq_ratio , sqrt_of_others))
-    if this_seq_ratio ==  0.5 and confident_score == 0:  #
-        confident_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
-    better_confident_score = None
+    if this_seq_ratio ==  0.5 and confidence_score == 0:  #
+        confidence_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
+    better_confidence_score = None
     if no_pre_identification:
         pep_seq = "R_NEW_" + pep_seq
+        better_confidence_score = confidence_score
     else:
-        if confident_score < 0 and max_seq_ratio > 0.5:
+        if confidence_score < 0 and max_seq_ratio > 0.5:
             ##recommend a new seq, and calculate it's conf score
             try:
                 other_ratios_2.pop(max_seq)
@@ -213,7 +214,86 @@ def calculate_conf_sc_for_a_seq(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spe
             for other_ratio in other_ratios_2.values():
                 sum_sqr_of_others += pow(other_ratio,2)
             sqrt_of_others = math.sqrt(sum_sqr_of_others)
-            better_confident_score = normalized_n_spec * (max_seq_ratio - sqrt_of_others)
+            better_confidence_score = normalized_n_spec * (max_seq_ratio - sqrt_of_others)
         else:
             pep_seq = "PRE_" + pep_seq
-    return (confident_score, pep_seq, better_confident_score)
+    return (confidence_score, pep_seq, better_confidence_score)
+
+#calculate all pep_seq's confidence scores in a cluster, and generate a conf_score for non-exist pep in cluster, if need to recommend a new pep seq, return it's max score pep
+def calculate_conf_sc_for_a_cluster(cluster):
+    # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
+    cluster_id = cluster['id']
+    ratio = cluster['ratio']
+    n_spec = cluster['n_spec']
+    seqs_ratios_str = cluster['seqs_ratios']
+
+    if n_spec > 1000:
+        n_spec = 1000
+    normalized_n_spec = math.log(n_spec)/math.log(1000)
+
+    #transfer the string to standard json string
+    seqs_ratios_str = seqs_ratios_str.replace("'","\"")
+    seqs_ratios_str = seqs_ratios_str.replace(": ",": \"")
+    seqs_ratios_str = seqs_ratios_str.replace(",","\",")
+    seqs_ratios_str = seqs_ratios_str.replace("}","\"}")
+    seqs_ratios = json.loads(seqs_ratios_str)
+
+
+    max_seq_ratio = 0.0
+    max_seq = ""
+    ratios = dict()
+    sum_ratio = 0.0
+    allUpper = re.compile(r'[^A-Z]')
+    for seq in seqs_ratios.keys():
+        if allUpper.match(seq):
+            print(allUpper.match(seq))
+            raise Exception("Peptide sequence is not all upper case letter: " + seq)
+
+        ratios[seq] = float(seqs_ratios.get(seq))
+        sum_ratio += ratios[seq]
+        if ratios[seq] > max_seq_ratio:
+            max_seq_ratio = float(ratios[seq])
+            max_seq = seq
+
+
+    if max_seq_ratio > ratio + 0.01 or max_seq_ratio < ratio - 0.01:
+        raise Exception("The max-seq_ratio is not equal to the ratio in database with cluster %s : %s, %f"%(cluster_id, seqs_ratios_str, ratio))
+
+    #some time, multiple sequences could be assigned to one spectrum, cause a sum of ratios more than 1.
+    #for this situation, we re set the ratios by dividing make the all ratios to be 1
+    if sum_ratio > 1.001:
+        # print("old ratios: " + str(ratios) + " for cluster " + cluster_id)
+        for seq in ratios:
+            ratios[seq] = ratios[seq]/sum_ratio
+        # print("new ratios divied by a factor: " + str(ratios) + " for cluster " + cluster_id)
+
+    #calculating the confidence scores for the seq in cluster
+    confidence_scores = dict()
+    for seq in ratios.keys():
+        other_ratios = ratios.copy()
+        this_ratio = other_ratios.pop(seq)
+        sum_sqr_of_others = 0.0
+        for other_ratio in other_ratios.values():
+            sum_sqr_of_others += pow(other_ratio,2)
+        sqrt_of_others = math.sqrt(sum_sqr_of_others)
+        confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+        if this_ratio ==  0.5 and confidence_score == 0:  #
+            confidence_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
+        confidence_scores[seq] = confidence_score
+
+    #calculating the confidence scores for the non-exist seq
+    this_ratio = 1.0/(n_spec + 1)
+    adjust_factor = n_spec/(n_spec + 1.0)
+    for akey in ratios.keys():
+        ratios[akey] *= adjust_factor
+    sum_sqr_of_others = 0.0
+    for other_ratio in ratios.values():
+        sum_sqr_of_others += pow(other_ratio,2)
+    sqrt_of_others = math.sqrt(sum_sqr_of_others)
+    confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+    confidence_scores['_NonSEQ'] = confidence_score
+
+    return (confidence_scores)
+
+
+

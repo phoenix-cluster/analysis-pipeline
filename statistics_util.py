@@ -18,14 +18,12 @@ lib_spec_table_prefix = cluster_table_prefix + "_SPEC"
 set thresholds for each project, by recreating the view
 """
 
-default_threshods = {
+default_thresholds = {
     "cluster_size_threshold": 10,
     "cluster_ratio_threshold": 0.5,
     "conf_sc_threshold": 0.1,
     "spectrast_fval_threshold": 0.5
 }
-
-
 def set_threshold(project_id, thresholds, date, host):
     conn = phoenix.get_conn(host)
     cursor = conn.cursor()
@@ -44,7 +42,9 @@ def set_threshold(project_id, thresholds, date, host):
         thresholds.get('spectrast_fval_threshold'),
         thresholds.get('conf_sc_threshold'),
     )
+    print(create_view_sql)
     cursor.execute(create_view_sql)
+
 
     drop_view_sql = "drop view if exists " + pos_sc_psms_view_name;
     cursor.execute(drop_view_sql)
@@ -87,7 +87,80 @@ def set_threshold(project_id, thresholds, date, host):
         thresholds.get('spectrast_fval_threshold'),
     )
     cursor.execute(create_view_sql)
+    print(thresholds.get('spectrast_fval_threshold'))
+    print(type(thresholds.get('conf_sc_threshold')))
+    #persist the thresholds to phoenix db
+    project_ana_record_table_name = "t_project_analysis_record"
+    upsert_sql = "upsert into " + project_ana_record_table_name + "(" +\
+        "project_id, cluster_ratio_threshold, cluster_size_threshold, conf_sc_threshold, spectrast_fval_threshold )" +\
+        "VALUES( '%s', %f, %d, %f, %f )" % (
+        project_id,
+        thresholds.get('cluster_ratio_threshold'),
+        thresholds.get('cluster_size_threshold'),
+        thresholds.get('conf_sc_threshold'),
+        thresholds.get('spectrast_fval_threshold')
+        )
+    cursor.execute(upsert_sql)
+    cursor.close()
+    conn.close()
 
+
+def create_views(project_id, thresholds, date, host):
+    """"""
+    conn = phoenix.get_conn(host)
+    cursor = conn.cursor()
+    new_psm_view_name = "V_" + project_id.upper() + "_" + "NEW_PSM";
+    pos_sc_psms_view_name = "V_" + project_id.upper() + "_" + "P_SCORE_PSM";
+    neg_sc_psms_view_name = "V_" + project_id.upper() + "_" + "N_SCORE_PSM";
+    better_psms_view_name = "V_" + project_id.upper() + "_" + "BETTER_PSM";
+    matched_spec_view_name = "V_" + project_id.upper() + "_SPEC_CLUSTER_MATCH"
+
+    drop_view_sql = "drop view if exists " + new_psm_view_name;
+    cursor.execute(drop_view_sql)
+    create_view_sql = "create view %s as select * from T_%s_NEW_PSM_%s " % (
+        new_psm_view_name, project_id.upper(), date)
+    cursor.execute(create_view_sql)
+
+
+    drop_view_sql = "drop view if exists " + pos_sc_psms_view_name;
+    cursor.execute(drop_view_sql)
+    create_view_sql = "create view %s as select * from T_%s_P_SCORE_PSM_%s " % (
+        pos_sc_psms_view_name, project_id.upper(), date)
+    cursor.execute(create_view_sql)
+
+    drop_view_sql = "drop view if exists " + neg_sc_psms_view_name
+    cursor.execute(drop_view_sql)
+    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s" % (
+        neg_sc_psms_view_name, project_id.upper(), date)
+    cursor.execute(create_view_sql)
+
+    drop_view_sql = "drop view if exists " + better_psms_view_name
+    cursor.execute(drop_view_sql)
+    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s where recomm_seq_sc >= 0" % (
+        better_psms_view_name, project_id.upper(), date)
+    cursor.execute(create_view_sql)
+
+    drop_view_sql = "drop view if exists " + matched_spec_view_name
+    cursor.execute(drop_view_sql)
+    create_view_sql = "create view %s as select * from T_%s_SPEC_CLUSTER_MATCH_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f " % (
+        matched_spec_view_name, project_id.upper(), date,
+        thresholds.get('cluster_ratio_threshold'),
+        thresholds.get('cluster_size_threshold'),
+        thresholds.get('spectrast_fval_threshold'),
+    )
+    cursor.execute(create_view_sql)
+    #persist the thresholds to phoenix db
+    project_ana_record_table_name = "t_project_analysis_record"
+    upsert_sql = "upsert into " + project_ana_record_table_name + "(" +\
+        "project_id, cluster_ratio_threshold, cluster_size_threshold, conf_sc_threshold, spectrast_fval_threshold )" +\
+        "VALUES( '%s', %f, %d, %f, %f )" % (
+        project_id,
+        thresholds.get('cluster_ratio_threshold'),
+        thresholds.get('cluster_size_threshold'),
+        thresholds.get('conf_sc_threshold'),
+        thresholds.get('spectrast_fval_threshold')
+        )
+    cursor.execute(upsert_sql)
     cursor.close()
     conn.close()
 
@@ -97,7 +170,7 @@ def get_row_count(table_name, cursor):
     cursor.execute(select_sql)
     rs = cursor.fetchone()
     if rs == None:
-        return None
+        return 0
     return rs[0]
 
 def get_sum_spec(table_name, cursor):
@@ -105,7 +178,7 @@ def get_sum_spec(table_name, cursor):
     cursor.execute(select_sql)
     rs = cursor.fetchone()
     if rs == None:
-        return None
+        return 0
     return rs[0]
 
 
@@ -115,11 +188,11 @@ def get_matched_id_spec_no(project_id, cursor):
     cursor.execute(select_sql)
     rs = cursor.fetchone()
     if rs == None:
-        return None
+        return 0
     return rs[0]
 
 
-def get_statistics_data(project_id, host):
+def calc_and_persist_statistics_data(project_id, host):
     """
 
     :param project_id:
@@ -140,6 +213,11 @@ def get_statistics_data(project_id, host):
     cursor = conn.cursor()
 
     statistics_results = dict()
+    # new_psm_view_name = "V_" + project_id.upper() + "_" + "NEW_PSM"
+    # pos_sc_psms_view_name = "V_" + project_id.upper() + "_" + "P_SCORE_PSM"
+    # neg_sc_psms_view_name = "V_" + project_id.upper() + "_" + "N_SCORE_PSM"
+    # better_psms_view_name = "V_" + project_id.upper() + "_" + "Better_PSM"
+    # matched_table_name = "V_" + project_id.upper() + "_SPEC_CLUSTER_MATCH"
     new_psm_view_name = "V_" + project_id.upper() + "_" + "NEW_PSM"
     pos_sc_psms_view_name = "V_" + project_id.upper() + "_" + "P_SCORE_PSM"
     neg_sc_psms_view_name = "V_" + project_id.upper() + "_" + "N_SCORE_PSM"
@@ -159,6 +237,29 @@ def get_statistics_data(project_id, host):
     statistics_results['matched_spec_no'] = get_row_count(matched_table_name, cursor)
     statistics_results['matched_id_spec_no'] = matched_id_spec_no
 
+    for key in statistics_results.keys():
+        if (statistics_results.get(key) == None):
+            statistics_results[key] = 0
+
+    print(statistics_results)
+    #
+    project_ana_record_table_name = "t_project_analysis_record"
+    upsert_sql = "upsert into " + project_ana_record_table_name + "(" +\
+        "project_id, prePSM_no, prePSM_not_matched_no, prePSM_high_conf_no, prePSM_low_conf_no, better_PSM_no, new_PSM_no, matched_spec_no, matched_id_spec_no )" +\
+        "VALUES('%s', %d, %d, %d, %d, %d, %d, %d, %d)" % (
+        project_id,
+        statistics_results['prePSM_no'],
+        statistics_results['prePSM_not_matched_no'],
+        statistics_results['prePSM_high_conf_no'],
+        statistics_results['prePSM_low_conf_no'],
+        statistics_results['better_PSM_no'],
+        statistics_results['new_PSM_no'],
+        statistics_results['matched_spec_no'],
+        statistics_results['matched_id_spec_no']
+        )
+    cursor.execute(upsert_sql)
+
     cursor.close()
     conn.close()
     return statistics_results
+

@@ -86,17 +86,67 @@ def get_cluster_data(search_results, host):
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
-        cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
+        cluster_query_sql = "SELECT CLUSTER_RATIO, N_ID_SPEC, CONF_SC, SEQUENCES_RATIOS FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
         # print(cluster_query_sql)
         cursor.execute(cluster_query_sql)
         result = cursor.fetchone()
         cluster = dict()
         cluster['ratio'] = result[0]
         cluster['size'] = result[1]
+        cluster['conf_sc'] = result[2]
+        cluster['seqs_ratios'] = result[3]
         cluster_data[cluster_id] = cluster
     cursor.close()
     conn.close()
     return cluster_data
+
+
+"""
+Read cluster data from phoenix tables
+"""
+
+
+def get_all_clusters(host, cluster_table_name):
+    cluster_data = list()
+    conn = get_conn(host)
+    cursor = conn.cursor()
+    cluster_query_sql = "SELECT CLUSTER_ID, CLUSTER_RATIO, N_ID_SPEC, SEQUENCES_RATIOS FROM " + cluster_table_name
+    # cluster_query_sql += " limit 10"
+    cursor.execute(cluster_query_sql)
+    rs = cursor.fetchall()
+    for r in rs:
+        if r == None:
+            continue
+        cluster = dict()
+        cluster['id'] = r[0]
+        cluster['ratio'] = r[1]
+        cluster['n_spec'] = r[2]
+        cluster['seqs_ratios'] = r[3]
+        cluster['seqs_mods'] = r[4]
+        if r[1] == None or r[2] == None or r[3] == None or r[4] == None:
+            print("cluster " + r[0] + "has none field: " + str(cluster))
+            continue
+        cluster_data.append(cluster)
+    cursor.close()
+    conn.close()
+    return cluster_data
+
+
+def upsert_cluster_conf_sc(host, cluster_table_name, clusters):
+    conn = get_conn(host)
+    cursor = conn.cursor()
+    upsert_data = []
+    upsert_sql = "UPSERT INTO \"" + cluster_table_name + "\"" \
+                 "(cluster_id, conf_sc)" + \
+                 "VALUES (?,?)"
+
+    for cluster in clusters:
+        upsert_data.append((cluster['id'], cluster['conf_sc']))
+
+    cursor.executemany(upsert_sql, upsert_data)
+
+    cursor.close()
+    conn.close()
 
 
 """
@@ -130,8 +180,9 @@ def upsert_statistics_to_phoenix(project_id, host, statistics_results):
         statistics_results.get('project_id '),
         statistics_results.get('cluster_size_threshold'),
         statistics_results.get('cluster_ratio_threshold'),
-        statistics_results.get('conf_sc_threshold'), #confident score threshold for accepting the recommend PSM or new identified PSM
-        statistics_results.get('spectrast_fval_threshold'), #fval threshold in spectrast matching
+        statistics_results.get('conf_sc_threshold'),
+        # confident score threshold for accepting the recommend PSM or new identified PSM
+        statistics_results.get('spectrast_fval_threshold'),  # fval threshold in spectrast matching
         statistics_results.get('prePSM_no'),
         statistics_results.get('prePSM_not_matched'),
         statistics_results.get('prePSM_high_conf_no'),
@@ -140,7 +191,7 @@ def upsert_statistics_to_phoenix(project_id, host, statistics_results):
         statistics_results.get('new_PSM_no'),
         statistics_results.get('matched_spec_no'),
         statistics_results.get('matched_id_spec_no'),
-        )
+    )
     # print(upsert_sql)
 
     cursor.execute(upsert_sql)
@@ -148,60 +199,142 @@ def upsert_statistics_to_phoenix(project_id, host, statistics_results):
     cursor.close()
     conn.close()
 
+
 """
 Export search result of a project to phoenix/hbase table
 """
 
-def export_sr_to_phoenix(project_id, search_results, identified_spectra, cluster_data, host):
+
+def export_sr_to_phoenix(project_id, search_results, cluster_data, host):
     spec_peps = get_spectra_pep(project_id, host)
     conf_sc_set = cf_calc.calculate_conf_sc(search_results, spec_peps, host)
-    upsert_matched_psm_table(project_id, search_results, conf_sc_set, cluster_data, host)
-    upsert_score_psm_table(project_id, search_results, identified_spectra, conf_sc_set, cluster_data, host)
+    # upsert_matched_psm_table(project_id, search_results, host)
+    return conf_sc_set
+    # upsert_score_psm_table(project_id, search_results, identified_spectra, conf_sc_set, cluster_data, host)
 
 
-def upsert_matched_psm_table(project_id, search_results, conf_sc_set, cluster_data, host):
+def json_stand(string):
+    #transfer the string to standard json string
+    if string != None:
+        string = string.replace("'","\"")
+        string = string.replace(": ",": \"")
+        string = string.replace(",","\",")
+        string = string.replace("}","\"}")
+    return string
+
+# def upsert_matched_psm_table(project_id, search_results, conf_sc_set, cluster_data, host):
+def upsert_matched_psm_table(project_id, search_results, identified_specta, cluster_data, host, date):
     conn = get_conn(host)
     cursor = conn.cursor()
 
-    match_table_name = "T_" + project_id + "_spec_cluster_match_" + time.strftime("%Y%m%d")
+    match_table_name = "T_" + project_id + "_spec_cluster_match_" + date
     create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + match_table_name.upper() + "\" (" + \
-                       "spec_title VARCHAR NOT NULL PRIMARY KEY ," + \
-                       "dot FLOAT ," + \
+                       "psm_id INTEGER NOT NULL PRIMARY KEY," + \
+                       "spec_title VARCHAR, " + \
+                       "dot FLOAT, " + \
                        "f_val FLOAT, " + \
-                       "conf_sc FLOAT, " + \
-                       "recomm_seq_sc FLOAT, " + \
                        "cluster_id VARCHAR, " + \
                        "cluster_size INTEGER, " + \
-                       "cluster_ratio FLOAT" + \
+                       "cluster_ratio FLOAT, " + \
+                       "pre_seq VARCHAR, " + \
+                       "pre_mods  VARCHAR, " + \
+                       "recomm_seq VARCHAR, " + \
+                       "recomm_mods  VARCHAR, " + \
+                       "conf_sc FLOAT, " + \
+                       "recomm_seq_sc FLOAT " + \
                        ")"
     cursor.execute(create_table_sql)
 
-    # row = [cluster_id, pep_seq, conf_score, f_val, cluster_ratio, cluster_size, recommend_pep_seq, num_spec, spectra]
+    upsert_sql = "UPSERT INTO " + match_table_name.upper() + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    upsert_data = list()
+    psm_dict = dict()
+    psm_id = 0
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         dot = float(search_result.get('dot'))
-        fval = float(search_result.get('fval'))
-        conf_sc = float(conf_sc_set[spec_title]['conf_score'])
-        recomm_seq_sc = -1.0
+        f_val = float(search_result.get('fval'))
 
         cluster_id = search_result.get('lib_spec_id')
         cluster = cluster_data.get(cluster_id)
-        cluster_ratio = cluster.get('ratio')
+        cluster_ratio = float(cluster.get('ratio'))
         cluster_size = cluster.get('size')
+        cluster_conf_sc_str = json_stand(cluster.get('conf_sc'))
+        seqs_ratios_str = json_stand(cluster.get('seqs_ratios'))
+        seqs_mods_str = json_stand(cluster.get('seqs_mods'))
 
-        if conf_sc_set[spec_title]['recomm_seq_score']:
-            recomm_seq_sc = float(conf_sc_set[spec_title]['recomm_seq_score'])
-        upsert_sql = "UPSERT INTO " + match_table_name + " VALUES ('%s', %f, %f, %f, %f, '%s', %d, %f)" % (
-            spec_title, dot, fval, conf_sc, recomm_seq_sc, cluster_id, cluster_size, cluster_ratio)
-        # print(upsert_sql)
+        conf_sc_dict = None
+        seqs_ratios_dict = None
+        mods_dict = None
+        if cluster_conf_sc_str :
+            conf_sc_dict = json.loads(cluster_conf_sc_str)
+        if seqs_ratios_str:
+            seqs_ratios_dict = json.loads(seqs_ratios_str)
+        if seqs_mods_str:
+            mods_dict = json.loads(seqs_mods_str)
 
-        cursor.execute(upsert_sql)
+        max_sc = 0.0
+        max_sc_seq = ''
+        if conf_sc_dict == None:
+            print("cluster %s do not has confidence score str"%(cluster_id))
+            continue
+        for each_seq in conf_sc_dict.keys():
+            if float(conf_sc_dict.get(each_seq)) > max_sc:
+                max_sc = float(conf_sc_dict.get(each_seq))
+                max_sc_seq = each_seq
 
+        identification = identified_specta.get(spec_title)
+        if identification:
+            pre_seq = identification.get('id_seq')
+            pre_mods = identification.get('id_mods')
+            il_seq = pre_seq.replace('I', 'L')
+
+            seq_ratio = seqs_ratios_dict.get(il_seq, -1)
+
+            if seq_ratio == cluster_ratio:      #this seq matches to the highest score seq
+                recomm_seq = "PRE_"
+                recomm_mods = ""
+                conf_sc = float(conf_sc_dict.get(il_seq))
+                recomm_seq_sc = conf_sc
+            elif il_seq in conf_sc_dict.keys():  #this seq matches to the lower score seq
+                recomm_seq = "R_Better_" + max_sc_seq
+                if mods_dict:
+                    recomm_mods = mods_dict.get(max_sc_seq)
+                else:
+                    recomm_mods = ""
+                conf_sc = float(conf_sc_dict.get(il_seq))
+                recomm_seq_sc = max_sc
+        else:                              #this seq matches non seq in the cluster
+            pre_seq = ''
+            pre_mods = ''
+            recomm_seq = "R_NEW_" + max_sc_seq
+            if mods_dict:
+                recomm_mods = mods_dict.get(max_sc_seq)
+            else:
+                recomm_mods = ""
+            conf_sc = 0
+            recomm_seq_sc = max_sc
+        psm_id += 1
+        upsert_data.append((psm_id, spec_title, dot, f_val, cluster_id, cluster_size, cluster_ratio, pre_seq, pre_mods,
+                            recomm_seq, recomm_mods, conf_sc, recomm_seq_sc))
+
+        psm = dict()
+        psm['id'] = id
+        psm['pre_seq'] = pre_seq
+        psm['pre_mods'] = pre_mods
+        psm['f_val'] = f_val
+        psm['cluster_id'] = cluster_id
+        psm['cluster_size'] = cluster_size
+        psm['cluster_ratio'] = cluster_ratio
+        psm['conf_sc'] = conf_sc
+        psm['recomm_seq_sc'] = recomm_seq_sc
+        psm_dict[spec_title] = psm
+
+    cursor.executemany(upsert_sql, upsert_data)
     cursor.close()
     conn.close()
 
 
-def upsert_score_psm_table(project_id, search_results, identified_spectra, conf_sc_set, cluster_data, host):
+def build_score_psm_table(project_id, search_results, identified_spectra, conf_sc_set, thresholds, cluster_data, host):
     conn = get_conn(host)
     cursor = conn.cursor()
     spectra_matched_to_cluster = dict()
@@ -243,7 +376,27 @@ def upsert_score_psm_table(project_id, search_results, identified_spectra, conf_
 
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
+
+        f_val = float(search_results.get(spec_title).get('fval'))
+        if f_val < thresholds.get('spectrast_fval_threshold'):
+            continue
+
         cluster_id = search_result.get('lib_spec_id')
+        cluster = cluster_data.get(cluster_id)
+        cluster_ratio = cluster.get('ratio')
+        cluster_size = cluster.get('size')
+        if cluster_ratio < thresholds.get('cluster_ratio_threshold') or cluster_size < thresholds.get(
+                'cluster_size_threshold'):
+            continue
+
+        conf_score = conf_sc_set.get(spec_title).get('conf_score')
+        recomm_seq_sc = conf_sc_set.get(spec_title).get('recomm_seq_score')
+        if conf_score and conf_score > 0 and conf_score < thresholds.get(
+                'conf_sc_threshold'):  # For pre PSMs with postive confidence score, ignore the PSMs below threshold
+            continue
+        if conf_score and conf_score < 0 and recomm_seq_sc and recomm_seq_sc < thresholds.get(
+                'conf_sc_threshold'):  # For pre PSMs with negtive confidence score or unidentified (-1 for conf_sc), ignore the PSMs whose recommend seq's score is below threshold
+            continue
         matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
         matched_spectra.append(spec_title)
         spectra_matched_to_cluster[cluster_id] = matched_spectra
@@ -318,6 +471,160 @@ def upsert_score_psm_table(project_id, search_results, identified_spectra, conf_
     cursor.close()
     conn.close()
 
+def build_score_psm_table_new(project_id, thresholds, host, date):
+    conn = get_conn(host)
+    cursor = conn.cursor()
+    if date == None:
+        date = time.strftime("%Y%m%d")
+
+    p_score_psm_table_name = "T_" + project_id + "_p_score_psm_" + date
+    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + p_score_psm_table_name.upper() + "\" (" + \
+                       "row_id INTEGER NOT NULL PRIMARY KEY," + \
+                       "conf_sc FLOAT, " + \
+                       "cluster_ratio FLOAT, " + \
+                       "cluster_size INTEGER, " + \
+                       "num_spec INTEGER, " + \
+                       "spectra VARCHAR, " + \
+                       "acceptance INTEGER" + \
+                       ")"
+    cursor.execute(create_table_sql)
+
+    n_score_psm_table_name = "T_" + project_id + "_n_score_psm_" + date
+    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + n_score_psm_table_name.upper() + "\" (" + \
+                       "row_id INTEGER NOT NULL PRIMARY KEY," + \
+                       "conf_sc FLOAT, " + \
+                       "recomm_seq_sc FLOAT, " + \
+                       "cluster_ratio FLOAT, " + \
+                       "cluster_size INTEGER, " + \
+                       "num_spec INTEGER, " + \
+                       "spectra VARCHAR, " + \
+                       "acceptance INTEGER" + \
+                       ")"
+    cursor.execute(create_table_sql)
+
+    new_psm_table_name = "T_" + project_id + "_new_psm_" + date
+    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + new_psm_table_name.upper() + "\" (" + \
+                       "row_id INTEGER NOT NULL PRIMARY KEY," + \
+                       "recomm_seq_sc FLOAT, " + \
+                       "cluster_ratio FLOAT, " + \
+                       "cluster_size INTEGER, " + \
+                       "num_spec INTEGER, " + \
+                       "spectra VARCHAR, " + \
+                       "acceptance INTEGER" + \
+                       ")"
+    cursor.execute(create_table_sql)
+
+    match_table_name = "T_" + project_id + "_spec_cluster_match_" + date
+    select_sql = "select psm_id, spec_title, pre_seq, pre_mods, f_val, cluster_id, " \
+                 "cluster_size, cluster_ratio, conf_sc, recomm_seq_sc from %s" \
+                 " where f_val >= %f and cluster_ratio >= %f and cluster_size >= %d" % (
+                    match_table_name.upper(), thresholds.get('spectrast_fval_threshold'),
+                    thresholds.get('cluster_ratio_threshold'), thresholds.get('cluster_size_threshold')
+                )
+    cursor.execute(select_sql)
+    results = cursor.fetchall()
+    psm_dict = dict()
+    for rs in results:
+        psm = dict()
+        psm['id'] = rs[0]
+        spec_title = rs[1]
+        psm['pre_seq'] = rs[2]
+        psm['pre_mods'] = rs[3]
+        psm['f_val'] = rs[4]
+        psm['cluster_id'] = rs[5]
+        psm['cluster_size'] = rs[6]
+        psm['cluster_ratio'] = rs[7]
+        psm['conf_sc'] = rs[8]
+        psm['recomm_seq_sc'] = rs[9]
+        psm_dict[spec_title] = psm
+
+    #remove the psms violents the conf_sc/recomm_seq_sc threshods
+    #group the matched spec by cluster
+    spectra_matched_to_cluster = dict()
+    unid_spec_matched_to_cluster = dict()  # cluster_id as the key
+    for spec_title in psm_dict.keys():
+        psm = psm_dict.get(spec_title)
+        pre_seq = psm.get('pre_seq', None)
+        conf_score = float(psm.get('conf_sc'))
+        recomm_seq_sc = float(psm.get('recomm_seq_sc'))
+        cluster_id = psm.get('cluster_id')
+        if conf_score and conf_score > 0 \
+            and conf_score < thresholds.get('conf_sc_threshold'):  # For pre PSMs with postive confidence score, ignore the PSMs below threshold
+            continue
+        if conf_score and conf_score < 0 and recomm_seq_sc \
+            and recomm_seq_sc < thresholds.get('conf_sc_threshold'):  # For pre PSMs with negtive confidence score or unidentified (-1 for conf_sc), ignore the PSMs whose recommend seq's score is below threshold
+            continue
+        if pre_seq == None and recomm_seq_sc < thresholds.get('conf_sc_threshold'): # For the unidientfied spec, ignore the recommend New PSMs whose recommend seq's score is below threshold
+            continue
+        matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
+        matched_spectra.append(spec_title)
+        spectra_matched_to_cluster[cluster_id] = matched_spectra
+
+
+    p_score_psm_list = list()
+    n_score_psm_list = list()
+    new_psm_list = list()
+    for cluster_id in spectra_matched_to_cluster.keys():
+        matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
+        matched_peptides = dict()
+        #group the scored (previously identified) PSMs by peptide sequence(and modifications)
+        #or group the scored (previously unidentified) PSMs by peptide sequence(and modifications)
+        for matched_spec in matched_spectra:
+            psm = psm_dict.get(matched_spec, None)
+            pre_seq = psm.get('pre_seq')
+            pre_mods = psm.get('pre_mods', None)
+            if pre_seq:
+                pep_seq_mods_str = pre_seq
+                if pre_mods != None:
+                    pep_seq_mods_str += "||" + pre_mods
+                pep_spectra = matched_peptides.get(pep_seq_mods_str, [])
+                pep_spectra.append(matched_spec)
+                matched_peptides[pep_seq_mods_str] = pep_spectra
+            else:
+                matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id, [])
+                matched_unid_spec.append(matched_spec)
+                unid_spec_matched_to_cluster[cluster_id] = matched_unid_spec
+
+        for pep_seq_mods_str in matched_peptides.keys():
+            pep_spectra = matched_peptides.get(pep_seq_mods_str, [])
+            spec1 = pep_spectra[0]  # get the first spec in list
+            conf_score = psm_dict.get(spec1).get('conf_sc')
+            recomm_seq_sc = -1.0
+            if psm_dict.get(spec1).get('recomm_seq_sc'):
+                recomm_seq_sc = float(psm_dict.get(spec1).get('recomm_seq_sc'))
+            num_spec = len(pep_spectra)
+            spectra = "||".join(pep_spectra)
+            psm = psm_dict.get(spec1)
+            cluster_ratio = psm.get('cluster_ratio')
+            cluster_size = psm.get('cluster_size')
+
+            if conf_score > 0:
+                p_score_psm_list.append((len(p_score_psm_list)+1, conf_score, cluster_ratio, cluster_size, num_spec, spectra, 0))
+            if conf_score < 0:
+                n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_ratio, cluster_size, num_spec, spectra, 0))
+
+        #group the recommed new psms for one cluster
+        matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id)
+        if matched_unid_spec != None and len(matched_unid_spec) > 0:
+            num_spec = len(matched_unid_spec)
+            spec1 = matched_unid_spec[0]  # get the first spec in list
+            recomm_seq_sc = float(psm_dict.get(spec1).get('recomm_seq_sc'))
+            cluster_ratio = float(psm_dict.get(spec1).get('cluster_ratio'))
+            cluster_size = int(psm_dict.get(spec1).get('cluster_size'))
+            spectra = "||".join(matched_unid_spec)
+
+            new_psm_list.append((len(new_psm_list)+1, recomm_seq_sc, cluster_ratio, cluster_size, num_spec, spectra, 0))
+
+    upsert_p_score_psm_sql = "upsert into " + p_score_psm_table_name.upper() + " values (?,?,?,?,?,?,?)"
+    upsert_n_score_psm_sql = "upsert into " + n_score_psm_table_name.upper() + " values (?,?,?,?,?,?,?,?)"
+    upsert_new_psm_sql = "upsert into " + new_psm_table_name.upper() + " values (?,?,?,?,?,?,?)"
+
+    cursor.executemany(upsert_p_score_psm_sql, p_score_psm_list)
+    cursor.executemany(upsert_n_score_psm_sql, n_score_psm_list)
+    cursor.executemany(upsert_new_psm_sql, new_psm_list)
+    cursor.close()
+    conn.close()
+
 
 """
 Get all matched cluster results from phoenix 
@@ -351,7 +658,7 @@ def get_lib_rs_from_phoenix(search_results, host):
 
 
 """
-Export identification result of a project to phoenix/hbase table
+Export identification result of a project to phoenix/hbase table from mysql db
 """
 
 
@@ -387,6 +694,11 @@ def export_ident_to_phoenix(project_id, host, identifications):
     end = time.time()
     print("end phoenix inserting at " + str(end))
     print("totally time " + str(end - start))
+
+
+"""
+Export cluster data  to phoenix/hbase table from mysql db
+"""
 
 
 def import_clusters_to_phoenix(connection):
@@ -475,8 +787,33 @@ def get_ident_no(project_id, host):
     cursor.execute(sql_str)
     r = cursor.fetchone()
     total_n = r[0]
-    return(total_n)
+    return (total_n)
 
+
+def create_project_ana_record_table(host):
+    conn = get_conn(host)
+    cursor = conn.cursor()
+
+    project_ana_record_table_name = "t_project_analysis_record"
+    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + project_ana_record_table_name.upper() + "\" (" + \
+                       "project_id VARCHAR NOT NULL PRIMARY KEY, " + \
+                       "cluster_size_threshold INTEGER, " + \
+                       "cluster_ratio_threshold FLOAT, " + \
+                       "conf_sc_threshold FLOAT, " + \
+                       "spectrast_fval_threshold FLOAT, " + \
+                       "" + \
+                       "prePSM_no INTEGER, " + \
+                       "prePSM_not_matched_no INTEGER, " + \
+                       "prePSM_high_conf_no INTEGER, " + \
+                       "prePSM_low_conf_no INTEGER, " + \
+                       "better_PSM_no INTEGER, " + \
+                       "new_PSM_no INTEGER, " + \
+                       "matched_spec_no INTEGER, " + \
+                       "matched_id_spec_no INTEGER " + \
+                       ")"
+    cursor.execute(create_table_sql)
+    cursor.close()
+    conn.close()
 
 
 def test_cluster_select():
