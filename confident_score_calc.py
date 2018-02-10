@@ -28,8 +28,8 @@ def get_dict_from_string(str):
 Calculate the confidence scores for Original Pep-Spec-Match
 Based on our scoring model
 """
-def calculate_conf_sc(search_results, spectra_peps, host):
-    clusters = phoenix.get_lib_rs_from_phoenix(search_results, host)
+def calculate_conf_sc(search_results, clusters, spectra_peps, host):
+    # clusters = phoenix.get_lib_rs_from_phoenix(search_results, host)
     conf_scs = {}
     print("Calculating confidence scores")
     for spec_title in search_results.keys():

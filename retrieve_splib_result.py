@@ -7,6 +7,7 @@ The library is built from the PRIDE Cluster consensus spectra without identified
 """
 import os
 import xml.etree.ElementTree as ET
+import csv
 
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
@@ -35,28 +36,41 @@ def get_spec_title(mzML_path):
                     raise("Spectrum index" + index + " has empty spectrum title")
     mzMLfile.close()
     return(id_map)
-"""
-#write the spectra library search result to tabular file
-"""
-def write_to_file(output_file, search_results):
-    """    
-    "spec_title varchar(100) NOT NULL,"    + \
-    "scan_in_lib int(15) COLLATE utf8_bin NOT NULL,"    + \
-    "dot float NOT NULL,"    + \
-    "delta float NOT NULL,"    + \
-    "dot_bias float NOT NULL,"    + \
-    "mz_diff float NOT NULL,"    + \
-    "fval float NOT NULL,"    + \
-    """
 
-    with open(output_file, 'a') as o:
+"""
+#write the spectra library search result to csv file
+"""
+def write_to_csv(search_results, output_file, fieldnames):
+
+    with open(output_file, 'w', newline="") as f:
+        w = csv.writer(f)
+        w.writerow(fieldnames)
         for spec_title in search_results.keys():
             search_result = search_results.get(spec_title)
-            scan_in_lib = search_result.get('lib_spec_id')
-            dot = search_result.get('dot')
-            fval = search_result.get('fval')
-            o.write("%s\t%s\t%s\t%s\n"%(spec_title, scan_in_lib, dot, fval))
+            row = []
+            row.append(spec_title)
+            for fieldname in fieldnames[1:]:
+                row.append(search_result.get(fieldname))
+            w.writerow(row)
 
+"""
+#read the spectra library search result from csv file
+"""
+def read_csv(csv_file, fieldnames):
+    if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
+        return None
+    with open(csv_file, 'r') as f:
+        new_dict = {}
+        reader = csv.reader(f, delimiter=',')
+        fieldnames_from_file = next(reader)
+        if str(fieldnames_from_file) != str(fieldnames):
+            raise Exception("the fields name not matched: " + str(fieldnames) + " vs. " + str(fieldnames_from_file))
+
+        reader = csv.DictReader(f, fieldnames=fieldnames_from_file, delimiter=',')
+        for row in reader:
+            spec_title = row.pop('spec_title')
+            new_dict[spec_title] = row
+    return new_dict
 
 """
 retrive the results and write to output_file or phoenix database
@@ -112,34 +126,38 @@ def write_head_to_file(output_file):
         o.write("%s\t%s\t%s\t%s\n"%('spec_title', 'spec_in_lib', 'dot', 'fval'))
 
 
+
 """
 retrieve the spec_cluster match results and persist them into the tab file
 """
-def retrive_and_persist_to_file(project_id, output_to_file_flag = False):
+def retrive_search_result(project_id):
     input_path = project_id + '/'
-    output_file = project_id + '/lib_search_result.tab'
+    csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
 
     print("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
-    if output_to_file_flag:
-        write_head_to_file(output_file)
     search_results = {}
-    
-    if os.path.isfile(input_path):
-        mzML_path = remove_pepxml_ext(input_path) + "mzML"
-        title_map = get_spec_title(mzML_path)
-        search_results_of_file = retrieve_file(project_id, input_path, title_map)
-        if output_to_file_flag:
-            write_to_file(output_file, search_results_of_file)
+    fieldnames = ['spec_title', 'lib_spec_id', 'dot', 'fval']
+
+    if os.path.exists(csv_file) and os.path.getsize(csv_file) > 1:
+        search_results = read_csv(csv_file, fieldnames)
+
     else:
-    	for file in os.listdir(input_path):
-            if not file.lower().endswith('.pep.xml'):
-                continue
-            mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
+        if os.path.isfile(input_path):
+            mzML_path = remove_pepxml_ext(input_path) + "mzML"
             title_map = get_spec_title(mzML_path)
-            search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
-            if output_to_file_flag:
-                write_to_file(output_file, search_results_of_file)
+            search_results_of_file = retrieve_file(project_id, input_path, title_map)
             search_results.update(search_results_of_file)
+        else:
+            for file in os.listdir(input_path):
+                if not file.lower().endswith('.pep.xml'):
+                    continue
+                mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
+                title_map = get_spec_title(mzML_path)
+                search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
+                search_results.update(search_results_of_file)
+
+        write_to_csv(search_results, csv_file, fieldnames)
+
     return search_results
 
 # def main():
