@@ -65,8 +65,8 @@ def main():
 
     logging.info("Start to calculate project: " + project_id)
 
-    date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
-
+    # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
+    date = ''
     if arguments['--date']:
         date = arguments['--date']
 
@@ -89,11 +89,12 @@ def main():
         cluster_data = phoenix.get_cluster_data(lib_search_results, host)
 
     spec_match_detail_file = project_id + "/" + project_id + "_spec_match_details.csv"
-    matched_spec_details = psm_util.read_matched_spec_from_csv(spec_match_detail_file)
-    if matched_spec_details == None:
+    matched_spec_details_dict = psm_util.read_matched_spec_from_csv(spec_match_detail_file)
+    if matched_spec_details_dict == None:
         matched_spec_details = psm_util.build_matched_spec(lib_search_results, identified_spectra, cluster_data)
         psm_util.write_matched_spec_to_csv(matched_spec_details, spec_match_detail_file)
         phoenix.upsert_matched_psm_table_new(project_id, matched_spec_details, host, date)
+        matched_spec_details_dict = psm_util.read_matched_spec_from_csv(spec_match_detail_file)
     elapsed = time.clock() - start
     logging.info("%s phoenix persisting lib search results takes time: %f"%(project_id, elapsed))
     # #
@@ -105,10 +106,13 @@ def main():
 
     #set thresholds and get statistics
     start = time.clock()
-    phoenix.create_project_ana_record_table( host)
+    phoenix.create_project_ana_record_table(host)
     thresholds = stat_util.default_thresholds
-    phoenix.build_score_psm_table_new(project_id, cluster_data, thresholds, matched_spec_details, host, date)
+    phoenix.build_score_psm_table_new(project_id, cluster_data, thresholds, matched_spec_details_dict, host, date)
+    elapsed = time.clock() - start
+    logging.info("%s build score psm table takes time: %f"%(project_id, elapsed))
 
+    start = time.clock()
     stat_util.create_views(project_id, thresholds, date, host)
     statistics_results = stat_util.calc_and_persist_statistics_data(project_id, host)
     elapsed = time.clock() - start

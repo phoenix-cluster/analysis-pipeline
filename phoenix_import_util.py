@@ -227,7 +227,7 @@ def upsert_matched_psm_table_new(project_id, matched_spec_details, host, date):
     conn = get_conn(host)
     cursor = conn.cursor()
 
-    match_table_name = "T_" + project_id + "_spec_cluster_match_" + date
+    match_table_name = "T_" + project_id + "_spec_cluster_match_"
     create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + match_table_name.upper() + "\" (" + \
                        "spec_title VARCHAR NOT NULL PRIMARY KEY, " + \
                        "dot FLOAT, " + \
@@ -512,7 +512,7 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
 
     p_score_psm_table_name = "T_" + project_id + "_p_score_psm_" + date
 
-    drop_table_sql = "DROP TABLE  IF EXISTS \"" + p_score_psm_table_name.upper() + "\" "
+    drop_table_sql = "DROP TABLE  IF EXISTS \"" + p_score_psm_table_name.upper() + "\"  CASCADE "
     create_table_sql = "CREATE TABLE  \"" + p_score_psm_table_name.upper() + "\" (" + \
                        "row_id INTEGER NOT NULL PRIMARY KEY," + \
                        "conf_sc FLOAT, " + \
@@ -530,7 +530,7 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
     cursor.execute(create_table_sql)
 
     n_score_psm_table_name = "T_" + project_id + "_n_score_psm_" + date
-    drop_table_sql = "DROP TABLE IF EXISTS \"" + n_score_psm_table_name.upper() + "\""
+    drop_table_sql = "DROP TABLE IF EXISTS \"" + n_score_psm_table_name.upper() + "\" CASCADE "
     create_table_sql = "CREATE TABLE \"" + n_score_psm_table_name.upper() + "\" (" + \
                        "row_id INTEGER NOT NULL PRIMARY KEY," + \
                        "conf_sc FLOAT, " + \
@@ -551,7 +551,7 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
     cursor.execute(create_table_sql)
 
     new_psm_table_name = "T_" + project_id + "_new_psm_" + date
-    drop_table_sql = "DROP TABLE IF EXISTS \"" + new_psm_table_name.upper() + "\""
+    drop_table_sql = "DROP TABLE IF EXISTS \"" + new_psm_table_name.upper() + "\" CASCADE "
     create_table_sql = "CREATE TABLE \"" + new_psm_table_name.upper() + "\" (" + \
                        "row_id INTEGER NOT NULL PRIMARY KEY," + \
                        "recomm_seq_sc FLOAT, " + \

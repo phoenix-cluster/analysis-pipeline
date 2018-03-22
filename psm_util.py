@@ -57,7 +57,12 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
             # pre_seq = identification.get('id_seq')
             # pre_mods = identification.get('id_mods')
             pre_seq = identification.get('peptideSequence')
+            if pre_seq == None:
+                pre_seq = identification.get('id_seq')
+
             pre_mods = identification.get('modifications')
+            if pre_mods == None:
+                pre_mods = identification.get('id_mods')
 
             il_seq = pre_seq.replace('I', 'L')
 
