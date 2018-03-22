@@ -124,7 +124,7 @@ class FileName():
         b=[]
         for j in range(len(a)):
             print(a[j])
-            rule=re.findall(r'(.*\.)xml',str(a[j]))
+            rule=re.findall(r'(.*).xml',str(a[j]))
             if len(rule) !=0:
                 b.append(rule)
         print(b)
