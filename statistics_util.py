@@ -119,26 +119,38 @@ def create_views(project_id, thresholds, date, host):
     cursor.execute(drop_view_sql)
     create_view_sql = "create view %s as select * from T_%s_NEW_PSM_%s " % (
         new_psm_view_name, project_id.upper(), date)
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(create_view_sql)
+    except :
+        print("error in exceute SQL: %s" % (create_view_sql))
 
 
     drop_view_sql = "drop view if exists " + pos_sc_psms_view_name;
     cursor.execute(drop_view_sql)
     create_view_sql = "create view %s as select * from T_%s_P_SCORE_PSM_%s " % (
         pos_sc_psms_view_name, project_id.upper(), date)
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(create_view_sql)
+    except :
+        print("error in exceute SQL: %s" % (create_view_sql))
 
     drop_view_sql = "drop view if exists " + neg_sc_psms_view_name
     cursor.execute(drop_view_sql)
     create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s" % (
         neg_sc_psms_view_name, project_id.upper(), date)
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(create_view_sql)
+    except :
+        print("error in exceute SQL: %s" % (create_view_sql))
 
     drop_view_sql = "drop view if exists " + better_psms_view_name
     cursor.execute(drop_view_sql)
     create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s where recomm_seq_sc >= 0" % (
         better_psms_view_name, project_id.upper(), date)
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(create_view_sql)
+    except :
+        print("error in exceute SQL: %s" % (create_view_sql))
 
     drop_view_sql = "drop view if exists " + matched_spec_view_name
     cursor.execute(drop_view_sql)
@@ -148,7 +160,11 @@ def create_views(project_id, thresholds, date, host):
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
     )
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(create_view_sql)
+    except :
+        print("error in exceute SQL: %s" % (create_view_sql))
+
     #persist the thresholds to phoenix db
     project_ana_record_table_name = "t_project_analysis_record"
     upsert_sql = "upsert into " + project_ana_record_table_name + "(" +\

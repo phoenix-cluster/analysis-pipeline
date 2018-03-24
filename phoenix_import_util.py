@@ -2,6 +2,7 @@ import phoenixdb
 import time
 import math
 import os, sys, re, json
+import logging
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
@@ -598,24 +599,32 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
     #group the matched spec by cluster
     spectra_matched_to_cluster = dict()
     unid_spec_matched_to_cluster = dict()  # cluster_id as the key
+    removed_spec_no = 0
     for spec_title in psm_dict.keys():
         psm = psm_dict.get(spec_title)
+        f_val = psm.get('f_val', 0)
+        if f_val < thresholds.get('spectrast_fval_threshold'):
+            removed_spec_no += 1
+            continue
         pre_seq = psm.get('pre_seq', None)
         conf_score = float(psm.get('conf_sc'))
         recomm_seq_sc = float(psm.get('recomm_seq_sc'))
         cluster_id = psm.get('cluster_id')
         if conf_score and conf_score > 0 \
             and conf_score < thresholds.get('conf_sc_threshold'):  # For pre PSMs with postive confidence score, ignore the PSMs below threshold
+            removed_spec_no += 1
             continue
         if conf_score and conf_score < 0 and recomm_seq_sc \
             and recomm_seq_sc < thresholds.get('conf_sc_threshold'):  # For pre PSMs with negtive confidence score or unidentified (-1 for conf_sc), ignore the PSMs whose recommend seq's score is below threshold
+            removed_spec_no += 1
             continue
         if pre_seq == None and recomm_seq_sc < thresholds.get('conf_sc_threshold'): # For the unidientfied spec, ignore the recommend New PSMs whose recommend seq's score is below threshold
+            removed_spec_no += 1
             continue
         matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
         matched_spectra.append(spec_title)
         spectra_matched_to_cluster[cluster_id] = matched_spectra
-
+    logging.info("%d spectra have be filtered by thresholds" %(removed_spec_no))
 
     p_score_psm_list = list()
     n_score_psm_list = list()
