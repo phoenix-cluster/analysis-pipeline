@@ -1,5 +1,6 @@
 import sys, os
 import csv,json
+import logging
 
 def json_stand(string):
     #transfer the string to standard json string
@@ -41,7 +42,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
         max_sc = 0.0
         max_sc_seq = ''
         if conf_sc_dict == None:
-            print("cluster %s do not has confidence score str" % (cluster_id))
+            logging.info("cluster %s do not has confidence score str" % (cluster_id))
             continue
         for each_seq in conf_sc_dict.keys():
             if float(conf_sc_dict.get(each_seq)) > max_sc:
@@ -93,6 +94,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
             recomm_seq_sc = max_sc
         matched_spec.append((spec_title, dot, f_val, cluster_id, cluster_size, cluster_ratio, pre_seq, pre_mods,
                             recomm_seq, recomm_mods, conf_sc, recomm_seq_sc))
+    logging.info("Done build_matched_spec")
     return matched_spec
 
 def write_matched_spec_to_csv(matched_spec, output_file):
@@ -116,6 +118,8 @@ def write_matched_spec_to_csv(matched_spec, output_file):
         w.writerow(field_names)
         for row in matched_spec:
             w.writerow(row)
+    logging.info("Done write_matched_spec_to_csv")
+
 
 def read_matched_spec_from_csv(csv_file):
     if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
@@ -129,15 +133,16 @@ def read_matched_spec_from_csv(csv_file):
             spec_title = row.pop('spec_title')
             row['dot'] = float(row.get("dot"))
             row['f_val'] = float(row.get("f_val"))
-            # row['cluster_id'] = row.get["cluster_id"]
+            row['cluster_id'] = row.get("cluster_id")
             row['cluster_size'] = int(row.get("cluster_size"))
             row['cluster_ratio'] = float(row.get("cluster_ratio"))
-            # row['pre_seq'] = row.get("pre_seq")
-            # row['pre_mods'] = row.get("pre_mods")
-            # row['recomm_seq'] = row.get("recomm_seq")
-            # row['recomm_mods'] = row.get("recomm_mods")
+            row['pre_seq'] = row.get("pre_seq")
+            row['pre_mods'] = row.get("pre_mods")
+            row['recomm_seq'] = row.get("recomm_seq")
+            row['recomm_mods'] = row.get("recomm_mods")
             row['conf_sc'] = float(row.get("conf_sc"))
             row['recomm_seq_sc'] = float(row.get("recomm_seq_sc"))
 
             new_dict[spec_title] = row
+    logging.info("Done read_matched_spec_from_csv")
     return new_dict

@@ -53,7 +53,6 @@ def read_idenfitication_from_csv(csv_file):
 
 def main():
     arguments = docopt(__doc__, version='cluster_phoenix_importer 1.0 BETA')
-    logging.basicConfig(filename='myapp.log', level=logging.INFO)
 
     project_id = arguments['--project']
     host = "localhost"
@@ -63,6 +62,7 @@ def main():
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
 
+    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO)
     logging.info("Start to calculate project: " + project_id)
 
     # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
@@ -72,7 +72,12 @@ def main():
 
     # retrive from spectraST search result files
     start = time.clock()
-    lib_search_results = retriever.retrive_search_result(project_id) #retrieve the library search results and export them to file/phoenix db
+    lib_search_results = None
+    try:
+        lib_search_results = retriever.retrive_search_result(project_id) #retrieve the library search results and export them to file/phoenix db
+    except Exception as err:
+        logging.info("error in retriving spectraST search result file %s"%(err))
+
     elapsed = time.clock() - start
     logging.info("%s retriving lib search results takes time: %f"%(project_id, elapsed))
 
@@ -113,7 +118,7 @@ def main():
     logging.info("%s build score psm table takes time: %f"%(project_id, elapsed))
 
     start = time.clock()
-    stat_util.create_views(project_id, thresholds, date, host)
+    stat_util.create_views_old(project_id, thresholds, date, host)
     statistics_results = stat_util.calc_and_persist_statistics_data(project_id, host)
     elapsed = time.clock() - start
     logging.info("%s stastics calculation takes time: %f"%(project_id, elapsed))

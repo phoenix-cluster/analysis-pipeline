@@ -8,6 +8,7 @@ The library is built from the PRIDE Cluster consensus spectra without identified
 import os
 import xml.etree.ElementTree as ET
 import csv
+import logging
 
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
@@ -52,7 +53,7 @@ def write_to_csv(search_results, output_file, fieldnames):
             for fieldname in fieldnames[1:]:
                 row.append(search_result.get(fieldname))
             w.writerow(row)
-
+    logging.info("Wrote %d lines to spectra library search result file %s"%(len(search_results), output_file))
 """
 #read the spectra library search result from csv file
 """
@@ -71,6 +72,7 @@ def read_csv(csv_file, fieldnames):
             spec_title = row.pop('spec_title')
             new_dict[spec_title] = row
     return new_dict
+    logging.info("Read %d lines from spectra library search result file %s"%(len(new_dict), csv_file))
 
 """
 retrive the results and write to output_file or phoenix database
@@ -80,7 +82,7 @@ def retrieve_file(project_id, pepxml_path, title_map):
     tree = ET.parse(pepxml_path)
     root = tree.getroot()
 
-    print("Starting to retrieve" + pepxml_path)
+    logging.info("Starting to retrieve" + pepxml_path)
     msms_run_summary = root[0]
     count = 0
     search_results = {}
@@ -114,8 +116,8 @@ def retrieve_file(project_id, pepxml_path, title_map):
                 search_scores[score_name] = score_value 
         search_results[spectrum] = search_scores
         
-    print("Retrieving of " + pepxml_path + " is done.")
-    print("Totally " + str(count) + "spectra have been imported from this file.")
+    logging.info("Retrieving of " + pepxml_path + " is done.")
+    logging.info("Totally " + str(count) + "spectra have been imported from this file.")
     return search_results
 
 """
@@ -134,7 +136,7 @@ def retrive_search_result(project_id):
     input_path = project_id + '/'
     csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
 
-    print("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
+    logging.info("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
     search_results = {}
     fieldnames = ['spec_title', 'lib_spec_id', 'dot', 'fval']
 
@@ -145,16 +147,22 @@ def retrive_search_result(project_id):
         if os.path.isfile(input_path):
             mzML_path = remove_pepxml_ext(input_path) + "mzML"
             title_map = get_spec_title(mzML_path)
-            search_results_of_file = retrieve_file(project_id, input_path, title_map)
-            search_results.update(search_results_of_file)
+            try:
+                search_results_of_file = retrieve_file(project_id, input_path, title_map)
+                search_results.update(search_results_of_file)
+            except Exception as error:
+                logging.info("error in retrive search result file in %s"%(error))
         else:
             for file in os.listdir(input_path):
                 if not file.lower().endswith('.pep.xml'):
                     continue
                 mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
                 title_map = get_spec_title(mzML_path)
-                search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
-                search_results.update(search_results_of_file)
+                try:
+                    search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
+                    search_results.update(search_results_of_file)
+                except Exception as error:
+                    logging.info("error in retrive search result file in %s"%(error))
 
         write_to_csv(search_results, csv_file, fieldnames)
 

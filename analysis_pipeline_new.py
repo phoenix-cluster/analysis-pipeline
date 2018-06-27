@@ -18,6 +18,11 @@ import os,glob
 from docopt import docopt
 import urllib.request
 import json
+import time
+import logging
+
+#max number of parallel jobs
+parallel_jobs = 20
 
 def get_result_files(project_id):
     # xmlfiles = glob.glob(project_id+ '/*.xml')
@@ -45,7 +50,7 @@ def get_result_files(project_id):
                         f.write(result_file + "\n")
         except Exception as err:
             print(err)
-            print("Failed to download result files from PRIDE WebServicwe!")
+            print("Failed to download result files from PRIDE WebService!")
 
     return result_files
 
@@ -63,11 +68,18 @@ def create_unzip_shell_files(project_id, result_files):
         return
     unzip_file = project_id + "/unzip.sh"
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
+    temp_index = parallel_jobs
     with open(unzip_file,"w") as f:
         f.write(cd_shell_path)
         for file in result_files:
             if os.path.isfile(project_id  + "/" + file):
-                f.write("gzip -d " + file + " &\n")
+                temp_index -= 1
+                if temp_index == 0:
+                    temp_index = parallel_jobs
+                    f.write("gzip -d \"" + file + "\" ;\n")
+                else:
+                    f.write("gzip -d \"" + file + "\" &\n")
+
             elif os.path.isfile(project_id  + "/" + file[:-3]):
                 continue #this file has been unzipped
             else:
@@ -85,15 +97,23 @@ def create_import_shell_files(project_id, ms_run_names):
 
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
     command_str = "java -jar /home/ubuntu/mingze/tools/pridexml-to-phoenix/target/pridexml-to-phoenix-1.0-SNAPSHOT.jar " + \
-                   " -m -csv -ph -p %s -i %s \n"
+                   " -m -csv -ph -p %s -i \"%s\" %s\n"
 
     with open(import_file,"w") as f:
         f.write(cd_shell_path)
         f.write("rm %s_psm.csv \n" % (project_id))
         f.write("rm %s_spec.csv \n" % (project_id))
+        temp_n_parallel_jobs = int(parallel_jobs/5)
+        temp_index = temp_n_parallel_jobs
         for ms_run_name in ms_run_names:
             file_name = ("%s.xml" % (ms_run_name))
-            f.write(command_str % (project_id, file_name))
+            temp_index -= 1
+            if temp_index == 0:
+                temp_index = temp_n_parallel_jobs
+                f.write(command_str % (project_id, file_name, ';'))
+            else:
+                f.write(command_str % (project_id, file_name, '&'))
+
         print("done with creating import_to_phoenix.sh")
 
 def create_convert_shell_files(project_id, ms_run_names):
@@ -103,10 +123,16 @@ def create_convert_shell_files(project_id, ms_run_names):
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
     with open(convert_file,"w") as f:
         f.write(cd_shell_path)
+        temp_index = parallel_jobs
         for ms_run_name in ms_run_names:
             file_name = ("%s.mgf" % (ms_run_name))
-            f.write("msconvert %s --mzML -o %s &\n" % (file_name, "./"))
-        print("done with creating msconvert.sh")
+            temp_index -= 1
+            if temp_index == 0:
+                temp_index = parallel_jobs
+                f.write("msconvert \"%s\" --mzML -o %s ;\n" % (file_name, "./"))
+            else:
+                f.write("msconvert \"%s\" --mzML -o %s &\n" % (file_name, "./"))
+        print("Done with creating msconvert.sh")
 
 def create_spectrast_shell_files(project_id, ms_run_names):
     if len(ms_run_names) < 1:
@@ -115,69 +141,94 @@ def create_spectrast_shell_files(project_id, ms_run_names):
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
     with open(spectrast_search_file,"w") as f:
         f.write(cd_shell_path)
+        temp_index = parallel_jobs
         for ms_run_name in ms_run_names:
             file_name = "%s.mzML" % (ms_run_name)
-            f.write("spectrast -sL /home/ubuntu/mingze/spec_lib_searching/201504-spec-lib-nofilter/201504_nofil_min5.splib\
-             %s&\n" %(file_name))
+            temp_index -= 1
+            if temp_index == 0:
+                temp_index = parallel_jobs
+                f.write("spectrast -sL /home/ubuntu/mingze/spec_lib_searching/201504-spec-lib-nofilter/201504_nofil_min5.splib\
+                    \"%s\" ;\n" %(file_name))
+            else:
+                f.write("spectrast -sL /home/ubuntu/mingze/spec_lib_searching/201504-spec-lib-nofilter/201504_nofil_min5.splib\
+                    \"%s\" &\n" %(file_name))
         print("done with creating spectrast_search.sh")
 
 def main():
     arguments = docopt(__doc__, version='analysis_pipeline.py 1.0 BETA')
     project_id = arguments['--project'] or arguments['-p']
     print(project_id)
+    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO)
+    logging.info("Start to analysis (pipeline) project: " + project_id)
 
     result_files = get_result_files(project_id)
     ms_run_names = get_ms_run_names(result_files)
 
 
     unzip_file = project_id + "/unzip.sh"
-    redo = ""
+    redo = ''
     if os.path.isfile(unzip_file):
         while redo != 'y' and redo != 'n':
             redo = input('the unzip.sh is already there, do you really want to redo the unzip process? y/n')
-    if redo == 'y':
+    if redo == 'y' or redo == '':
         create_unzip_shell_files(project_id, result_files)
+        start = time.time()
         output = os.popen('sh '+ project_id + "/unzip.sh").readlines()
+        end = time.time()
         print("==--unzip--==:\n" + ''.join(output) + "\n")
+        logging.info("==--unzip--==:\n" + ''.join(output) + "\n")
+        logging.info("unziping take time %d seconds"%(end - start))
 
 
     import_file = project_id + "/import_to_phoenix.sh"
-    redo = ""
+    redo = ''
     if os.path.isfile(import_file):
         while redo != 'y' and redo != 'n':
             redo = input('the import_to_phoenix.sh is already there, do you really want to redo the import process? y/n')
-    if redo == 'y':
+    if redo == 'y' or redo == '':
         create_import_shell_files(project_id, ms_run_names)
+        start = time.time()
         output = os.popen('sh '+ project_id + "/import_to_phoenix.sh").readlines()
+        end = time.time()
         print("==--import--==:\n" + ''.join(output) + "\n")
-
-
-
+        logging.info("==--import--==:\n" + ''.join(output) + "\n")
+        logging.info("importing to phoenix/mgf take time %d seconds"%(end - start))
 
     convert_file = project_id + "/msconvert.sh"
-    redo = ""
+    redo = ''
     if os.path.isfile(convert_file):
         while redo != 'y' and redo != 'n':
             redo = input('the msconvert.sh is already there, do you really want to redo the msconvert process? y/n')
-    if redo == 'y':
+    if redo == 'y' or redo == '':
         create_convert_shell_files(project_id, ms_run_names)
+        start = time.time()
         output = os.popen('sh '+ project_id + "/msconvert.sh").readlines()
+        end = time.time()
         print("==--msconvert--==:\n" + ''.join(output) + "\n")
+        logging.info("==--msconvert--==:\n" + ''.join(output) + "\n")
+        logging.info("msconvert take time %d seconds"%(end - start))
 
 
     spectrast_search_file = project_id + "/spectrast_search.sh"
-    redo = ""
+    redo = ''
     if os.path.isfile(spectrast_search_file):
         while redo != 'y' and redo != 'n':
             redo = input('the spectrast_search.sh is already there, do you really want to redo the spectrast search process? y/n')
-    if redo == 'y':
+    if redo == 'y' or redo == '':
         create_spectrast_shell_files(project_id, ms_run_names)
+        start = time.time()
         output = os.popen('sh '+ project_id + "/spectrast_search.sh").readlines()
+        end = time.time()
         print("==--spectrast search--==:\n" + ''.join(output) + "\n")
+        logging.info("==--spectrast search--==:\n" + ''.join(output) + "\n")
+        logging.info("spectrast searching take time %d seconds"%(end - start))
     #
-
+    start = time.time()
     output = os.popen("/home/ubuntu/mingze/tools/spectra-library-analysis/enhancer_analyze.py -p %s" % (project_id)).readlines()
-    print("==--spectrast search--==:\n" + ''.join(output) + "\n")
+    end = time.time()
+    print("==--enhancer analyze --==:\n" + ''.join(output) + "\n")
+    logging.info("==--enhancer analyze --==:\n" + ''.join(output) + "\n")
+    logging.info("enhancer analyzing take time %d seconds"%(end - start))
 
 if __name__ == "__main__":
     main()

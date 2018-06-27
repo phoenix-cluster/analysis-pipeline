@@ -2,7 +2,7 @@ import os
 import re 
 class CreateShell():
     def __init__(self):
-        self.default_path="/home/luoxiyang/test/"
+        self.default_path="./"
         self.default_begin="#!/bin/bash\n"
         self.default_do,self.default_done="do\n","done"
         self.default_zip,self.default_unzip,self.default_zipfile,self.default_unzipfile="gzip","gunzip","*.xml\n","*.gz\n"

@@ -24,7 +24,7 @@ default_thresholds = {
     "conf_sc_threshold": 0.1,
     "spectrast_fval_threshold": 0.5
 }
-def set_threshold(project_id, thresholds, date, host):
+def create_views(project_id, thresholds, date, host):
     conn = phoenix.get_conn(host)
     cursor = conn.cursor()
     new_psm_view_name = "V_" + project_id.upper() + "_" + "NEW_PSM";
@@ -34,61 +34,78 @@ def set_threshold(project_id, thresholds, date, host):
     matched_spec_view_name = "V_" + project_id.upper() + "_SPEC_CLUSTER_MATCH"
 
     drop_view_sql = "drop view if exists " + new_psm_view_name;
-    cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_NEW_PSM_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and RECOMM_SEQ_SC >%f" % (
-        new_psm_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_NEW_PSM where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and RECOMM_SEQ_SC >%f" % (
+        new_psm_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
         thresholds.get('conf_sc_threshold'),
     )
-    print(create_view_sql)
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(drop_view_sql)
+        cursor.execute(create_view_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
 
 
     drop_view_sql = "drop view if exists " + pos_sc_psms_view_name;
-    cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and CONF_SC >%f" % (
-        pos_sc_psms_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and CONF_SC >%f" % (
+        pos_sc_psms_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
         thresholds.get('conf_sc_threshold'),
     )
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(drop_view_sql)
+        cursor.execute(create_view_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
 
     drop_view_sql = "drop view if exists " + neg_sc_psms_view_name
-    cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and CONF_SC <0" % (
-        neg_sc_psms_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and CONF_SC <0" % (
+        neg_sc_psms_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
     )
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(drop_view_sql)
+        cursor.execute(create_view_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
 
     drop_view_sql = "drop view if exists " + better_psms_view_name
-    cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and RECOMM_SEQ_SC >%f and CONF_SC <0" % (
-        better_psms_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_SCORE_PSM where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f and RECOMM_SEQ_SC >%f and CONF_SC <0" % (
+        better_psms_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
         thresholds.get('conf_sc_threshold'),
     )
-    cursor.execute(create_view_sql)
+    try:
+        cursor.execute(drop_view_sql)
+        cursor.execute(create_view_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
 
     drop_view_sql = "drop view if exists " + matched_spec_view_name
-    cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_SPEC_CLUSTER_MATCH_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f " % (
-        matched_spec_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_SPEC_CLUSTER_MATCH where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f " % (
+        matched_spec_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
     )
-    cursor.execute(create_view_sql)
-    print(thresholds.get('spectrast_fval_threshold'))
-    print(type(thresholds.get('conf_sc_threshold')))
+    try:
+        cursor.execute(drop_view_sql)
+        cursor.execute(create_view_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
     #persist the thresholds to phoenix db
     project_ana_record_table_name = "t_project_analysis_record"
     upsert_sql = "upsert into " + project_ana_record_table_name + "(" +\
@@ -100,12 +117,16 @@ def set_threshold(project_id, thresholds, date, host):
         thresholds.get('conf_sc_threshold'),
         thresholds.get('spectrast_fval_threshold')
         )
-    cursor.execute(upsert_sql)
+    try:
+        cursor.execute(upsert_sql)
+    except Exception as err:
+        print("error in exceute SQL: %s" % (create_view_sql))
+        print(err)
     cursor.close()
     conn.close()
 
 
-def create_views(project_id, thresholds, date, host):
+def create_views_old(project_id, thresholds, date, host):
     """"""
     conn = phoenix.get_conn(host)
     cursor = conn.cursor()
@@ -117,8 +138,8 @@ def create_views(project_id, thresholds, date, host):
 
     drop_view_sql = "drop view if exists " + new_psm_view_name;
     cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_NEW_PSM_%s " % (
-        new_psm_view_name, project_id.upper(), date)
+    create_view_sql = "create view %s as select * from T_%s_NEW_PSM " % (
+        new_psm_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
     except :
@@ -127,8 +148,8 @@ def create_views(project_id, thresholds, date, host):
 
     drop_view_sql = "drop view if exists " + pos_sc_psms_view_name;
     cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_P_SCORE_PSM_%s " % (
-        pos_sc_psms_view_name, project_id.upper(), date)
+    create_view_sql = "create view %s as select * from T_%s_P_SCORE_PSM " % (
+        pos_sc_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
     except :
@@ -136,8 +157,8 @@ def create_views(project_id, thresholds, date, host):
 
     drop_view_sql = "drop view if exists " + neg_sc_psms_view_name
     cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s" % (
-        neg_sc_psms_view_name, project_id.upper(), date)
+    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM" % (
+        neg_sc_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
     except :
@@ -145,8 +166,8 @@ def create_views(project_id, thresholds, date, host):
 
     drop_view_sql = "drop view if exists " + better_psms_view_name
     cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM_%s where recomm_seq_sc >= 0" % (
-        better_psms_view_name, project_id.upper(), date)
+    create_view_sql = "create view %s as select * from T_%s_N_SCORE_PSM where recomm_seq_sc >= 0" % (
+        better_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
     except :
@@ -154,8 +175,8 @@ def create_views(project_id, thresholds, date, host):
 
     drop_view_sql = "drop view if exists " + matched_spec_view_name
     cursor.execute(drop_view_sql)
-    create_view_sql = "create view %s as select * from T_%s_SPEC_CLUSTER_MATCH_%s where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f " % (
-        matched_spec_view_name, project_id.upper(), date,
+    create_view_sql = "create view %s as select * from T_%s_SPEC_CLUSTER_MATCH where CLUSTER_RATIO >=%d and CLUSTER_SIZE >=%d and F_VAL >=%f " % (
+        matched_spec_view_name, project_id.upper(),
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('spectrast_fval_threshold'),
