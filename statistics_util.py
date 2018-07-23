@@ -3,6 +3,7 @@ import phoenixdb
 # import time
 # import math
 import os, sys
+import logging
 # import re, json
 
 
@@ -142,6 +143,7 @@ def create_views_old(project_id, thresholds, date, host):
         new_psm_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
+        logging.info("Done with sql: %s"%(create_view_sql))
     except :
         print("error in exceute SQL: %s" % (create_view_sql))
 
@@ -152,6 +154,7 @@ def create_views_old(project_id, thresholds, date, host):
         pos_sc_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
+        logging.info("Done with sql: %s"%(create_view_sql))
     except :
         print("error in exceute SQL: %s" % (create_view_sql))
 
@@ -161,6 +164,7 @@ def create_views_old(project_id, thresholds, date, host):
         neg_sc_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
+        logging.info("Done with sql: %s"%(create_view_sql))
     except :
         print("error in exceute SQL: %s" % (create_view_sql))
 
@@ -170,6 +174,7 @@ def create_views_old(project_id, thresholds, date, host):
         better_psms_view_name, project_id.upper())
     try:
         cursor.execute(create_view_sql)
+        logging.info("Done with sql: %s"%(create_view_sql))
     except :
         print("error in exceute SQL: %s" % (create_view_sql))
 
@@ -183,6 +188,7 @@ def create_views_old(project_id, thresholds, date, host):
     )
     try:
         cursor.execute(create_view_sql)
+        logging.info("Done with sql: %s"%(create_view_sql))
     except :
         print("error in exceute SQL: %s" % (create_view_sql))
 
@@ -220,16 +226,29 @@ def get_sum_spec(table_name, cursor):
 
 
 
-def get_matched_id_spec_no(project_id, cursor):
-    select_sql = "select count(*) from V_%s_SPEC_CLUSTER_MATCH a, T_%s_PSM b where a.SPEC_TITLE = b.SPECTRUM_TITLE"  % (project_id.upper(), project_id.upper())
+def get_matched_id_spec_no(project_id, identified_spectra, cursor):
+    matched_spec = set()
+
+    select_sql = "select SPEC_TITLE from V_%s_SPEC_CLUSTER_MATCH "%project_id.upper()
     cursor.execute(select_sql)
-    rs = cursor.fetchone()
-    if rs == None:
-        return 0
-    return rs[0]
+    rs = cursor.fetchall()
+    for r in rs:
+        matched_spec.add(r[0])
+
+    identified_spec = set(identified_spectra.keys())
+    intersection_spec = matched_spec.intersection(identified_spec)
+    print("get %d intersection spec"%len(intersection_spec))
+    return (len(intersection_spec))
+
+    # select_sql = "select count(*) from V_%s_SPEC_CLUSTER_MATCH a, T_%s_PSM b where a.SPEC_TITLE = b.SPECTRUM_TITLE"  % (project_id.upper(), project_id.upper())
+    # cursor.execute(select_sql)
+    # rs = cursor.fetchone()
+    # if rs == None:
+    #     return 0
+    # return rs[0]
 
 
-def calc_and_persist_statistics_data(project_id, host):
+def calc_and_persist_statistics_data(project_id, identified_spectra, host):
     """
 
     :param project_id:
@@ -262,7 +281,7 @@ def calc_and_persist_statistics_data(project_id, host):
     matched_table_name = "V_" + project_id.upper() + "_SPEC_CLUSTER_MATCH"
     ident_table_name = "T_" + project_id.upper() + "_PSM"
 
-    matched_id_spec_no = get_matched_id_spec_no(project_id, cursor)
+    matched_id_spec_no = get_matched_id_spec_no(project_id, identified_spectra, cursor)
     prePSM_no = get_row_count(ident_table_name, cursor)
 
     statistics_results['prePSM_no'] = prePSM_no
@@ -295,6 +314,7 @@ def calc_and_persist_statistics_data(project_id, host):
         statistics_results['matched_id_spec_no']
         )
     cursor.execute(upsert_sql)
+    logging.info("Done with sql: %s"%(upsert_sql))
 
     cursor.close()
     conn.close()

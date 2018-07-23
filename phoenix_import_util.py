@@ -222,7 +222,7 @@ def json_stand(string):
         string = string.replace("}","\"}")
     return string
 
-def upsert_matched_psm_table_new(project_id, matched_spec_details, host, date):
+def upsert_matched_spec_table(project_id, matched_spec_details, host, date):
     conn = get_conn(host)
     cursor = conn.cursor()
 
@@ -247,13 +247,13 @@ def upsert_matched_psm_table_new(project_id, matched_spec_details, host, date):
     upsert_data = matched_spec_details
     try:
         cursor.executemany(upsert_sql, upsert_data)
+        logging.info("Done upsert_matched_psm_table_new, %d matched spectra has been imported")
     except Exception as e:
         logging.error("error in  upsert_matched_psm_table_new, failed to import the search result details(incluing score and recommend sequence) in to phoenix, caused by %s"%(e))
     finally:
         cursor.close()
         conn.close()
 
-    logging.info("Done upsert_matched_psm_table_new, %d matched spectra has been imported")
 
 
 
@@ -569,9 +569,12 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
                        "recomm_mods  VARCHAR, " + \
                        "acceptance INTEGER" + \
                        ")"
+    print(drop_table_sql)
+    print(create_table_sql)
     cursor.execute(drop_table_sql)
     cursor.execute(create_table_sql)
 
+    """
     if psm_dict == None:
         match_table_name = "T_" + project_id + "_spec_cluster_match" #+ date
         select_sql = "select spec_title, pre_seq, pre_mods,recomm_seq, recomm_mods, f_val, cluster_id, " \
@@ -597,12 +600,15 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
             psm['conf_sc'] = rs[9]
             psm['recomm_seq_sc'] = rs[10]
             psm_dict[spec_title] = psm
+    """
 
     #remove the psms violents the conf_sc/recomm_seq_sc threshods
     #group the matched spec by cluster
     spectra_matched_to_cluster = dict()
     unid_spec_matched_to_cluster = dict()  # cluster_id as the key
     removed_spec_no = 0
+    retail_spec_no = 0
+    logging.info("we have %d matched spec"%(len(psm_dict)))
     for spec_title in psm_dict.keys():
         psm = psm_dict.get(spec_title)
         f_val = psm.get('f_val', 0)
@@ -633,24 +639,30 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
         matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
         matched_spectra.append(spec_title)
         spectra_matched_to_cluster[cluster_id] = matched_spectra
+        retail_spec_no += 1
     logging.info("%d spectra have be filtered by thresholds" %(removed_spec_no))
+    logging.info("%d spectra have be retailed" %(retail_spec_no))
 
     p_score_psm_list = list()
     n_score_psm_list = list()
     new_psm_list = list()
     for cluster_id in spectra_matched_to_cluster.keys():
         matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
+        # logging.info("cluster %s matched to %d spec"%(cluster_id, len(matched_spectra)))
         cluster_ratio_str = cluster_data.get(cluster_id).get('seqs_ratios')
         matched_peptides = dict()
         #group the scored (previously identified) PSMs by peptide sequence(and modifications)
         #or group the scored (previously unidentified) PSMs by peptide sequence(and modifications)
         if(cluster_id.startswith("50668639")):
             logging.info(matched_spectra)
+        n_id = 0
+        n_unid = 0
         for matched_spec in matched_spectra:
             psm = psm_dict.get(matched_spec, None)
             pre_seq = psm.get('pre_seq')
             pre_mods = psm.get('pre_mods', None)
             if pre_seq:
+                n_id += 1
                 pep_seq_mods_str = pre_seq
                 if pre_mods != None:
                     pep_seq_mods_str += "||" + pre_mods
@@ -658,12 +670,17 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
                 pep_spectra.append(matched_spec)
                 matched_peptides[pep_seq_mods_str] = pep_spectra
             else:
+                n_unid += 1
                 matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id, [])
                 matched_unid_spec.append(matched_spec)
                 unid_spec_matched_to_cluster[cluster_id] = matched_unid_spec
+        # logging.info("%d id, %d unid"%(n_id, n_unid))
+        n_id = 0
+        n_id_in_p_score_list = 0
 
         for pep_seq_mods_str in matched_peptides.keys():
             pep_spectra = matched_peptides.get(pep_seq_mods_str, [])
+            n_id += len(pep_spectra)
             spec1 = pep_spectra[0]  # get the first spec in list
             conf_score = float(psm_dict.get(spec1).get('conf_sc'))
             recomm_seq_sc = 0.0
@@ -678,12 +695,16 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
             cluster_size = int(psm.get('cluster_size'))
             if conf_score > 0:
                 p_score_psm_list.append((len(p_score_psm_list)+1, conf_score, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, 0))
+                # logging.info("add num_spec: %d" % num_spec)
+                n_id_in_p_score_list += num_spec
             if conf_score < 0:
                 recomm_seq = psm.get('recomm_seq')
                 recomm_mods = psm.get('recomm_mods')
                 n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, 0))
 
-        #group the recommed new psms for one cluster
+        # logging.info("cluster %s matched to %d id spec in matched_peptides"%(cluster_id, n_id))
+        # logging.info("%d spec in p_score_list"%(n_id_in_p_score_list))
+        #group the recommend new psms for one cluster
         matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id)
         if matched_unid_spec != None and len(matched_unid_spec) > 0:
             num_spec = len(matched_unid_spec)
@@ -706,6 +727,10 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
         cursor.executemany(upsert_p_score_psm_sql, p_score_psm_list)
         cursor.executemany(upsert_n_score_psm_sql, n_score_psm_list)
         cursor.executemany(upsert_new_psm_sql, new_psm_list)
+
+        logging.info("%d rows has been imported in %s"%(len(p_score_psm_list), p_score_psm_table_name))
+        logging.info("%d rows has been imported in %s"%(len(n_score_psm_list), n_score_psm_table_name))
+        logging.info("%d rows has been imported in %s"%(len(new_psm_list), new_psm_table_name))
     except Exception as e:
         logging.error("failed to import psm tables, caused by %s"%(e))
     finally:
@@ -913,8 +938,8 @@ def test_cluster_select():
     # print(cluster_query_sql)
     cursor.execute(cluster_query_sql)
     result = cursor.fetchone()
-    print(result[0])
-    print(result[1])
+    # print(result[0])
+    # print(result[1])
 
 
 # retrieve_identification_from_phoenix("pxd000021", "localhost", "output.txt")

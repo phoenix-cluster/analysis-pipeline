@@ -36,20 +36,7 @@ import build_cluster_csv as cluster_csv
 import psm_util
 
 
-def read_idenfitication_from_csv(csv_file):
-    if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
-        return None
 
-    with open(csv_file, 'r') as f:
-        new_dict = {}
-        reader = csv.reader(f, delimiter=',')
-        fieldnames = next(reader)
-
-        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',')
-        for row in reader:
-            spec_title = row.pop('spectrumTitle')
-            new_dict[spec_title] = row
-    return new_dict
 
 def main():
     arguments = docopt(__doc__, version='cluster_phoenix_importer 1.0 BETA')
@@ -62,7 +49,7 @@ def main():
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
 
-    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO)
+    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to calculate project: " + project_id)
 
     # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
@@ -73,8 +60,10 @@ def main():
     # retrive from spectraST search result files
     start = time.clock()
     lib_search_results = None
+    input_path = project_id + '/'
+    sr_csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
     try:
-        lib_search_results = retriever.retrive_search_result(project_id) #retrieve the library search results and export them to file/phoenix db
+        lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file) #retrieve the library search results and export them to file/phoenix db
     except Exception as err:
         logging.info("error in retriving spectraST search result file %s"%(err))
 
@@ -84,10 +73,16 @@ def main():
     # export search result to phoenix_db by building the whole big table
     start = time.clock()
     psm_file = project_id + "/" + project_id + "_psm.csv"
-    identified_spectra  = read_idenfitication_from_csv(psm_file)
+    spec_file = project_id + "/" + project_id + "_spec.csv"
+    logging.info("start to read identification from csv")
+    print("start to read identification from csv")
+    identified_spectra  = psm_util.read_identification_from_csv(psm_file)
     if identified_spectra == None:
         identified_spectra = phoenix.retrieve_identification_from_phoenix(project_id, host, None)
+    else:
+        psm_util.insert_psms_to_phoenix_from_csv(project_id, identified_spectra, psm_file, host)
 
+    psm_util.insert_spec_to_phoenix_from_csv(project_id, spec_file, host) #specs also needs to be import because java pride xml importer don't import to phoenix any more
 
     cluster_data = cluster_csv.read_csv('clusters_min5.csv')
     if cluster_data == None:
@@ -98,8 +93,13 @@ def main():
     if matched_spec_details_dict == None:
         matched_spec_details = psm_util.build_matched_spec(lib_search_results, identified_spectra, cluster_data)
         psm_util.write_matched_spec_to_csv(matched_spec_details, spec_match_detail_file)
-        phoenix.upsert_matched_psm_table_new(project_id, matched_spec_details, host, date)
+        phoenix.upsert_matched_spec_table(project_id, matched_spec_details, host, date)
         matched_spec_details_dict = psm_util.read_matched_spec_from_csv(spec_match_detail_file)
+    else:
+        table_is_equal = retriever.table_is_equal_to_csv(project_id, matched_spec_details_dict, host, date)
+        if not table_is_equal:
+            matched_spec_details = psm_util.trans_matched_spec_to_list(matched_spec_details_dict)
+            phoenix.upsert_matched_spec_table(project_id, matched_spec_details, host, date)
     elapsed = time.clock() - start
     logging.info("%s phoenix persisting lib search results takes time: %f"%(project_id, elapsed))
     # #
@@ -119,7 +119,7 @@ def main():
 
     start = time.clock()
     stat_util.create_views_old(project_id, thresholds, date, host)
-    statistics_results = stat_util.calc_and_persist_statistics_data(project_id, host)
+    statistics_results = stat_util.calc_and_persist_statistics_data(project_id, identified_spectra, host)
     elapsed = time.clock() - start
     logging.info("%s stastics calculation takes time: %f"%(project_id, elapsed))
     logging.info(statistics_results)

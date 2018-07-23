@@ -9,6 +9,13 @@ import os
 import xml.etree.ElementTree as ET
 import csv
 import logging
+import phoenixdb
+
+def get_conn(host):
+    database_url = 'http://' + host + ':8765/'
+    conn = phoenixdb.connect(database_url, autocommit=True)
+    return conn
+
 
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
@@ -74,8 +81,30 @@ def read_csv(csv_file, fieldnames):
     return new_dict
     logging.info("Read %d lines from spectra library search result file %s"%(len(new_dict), csv_file))
 
+
+def table_is_equal_to_csv(project_id, search_result_details, host, date):
+    conn = get_conn(host)
+    cursor = conn.cursor()
+    match_table_name = "T_" + project_id + "_spec_cluster_match"
+
+    query_sql = "SELECT COUNT(*) FROM %s"%(match_table_name.upper())
+    cursor.execute(query_sql)
+    n_matches_in_db = cursor.fetchone()[0]
+    if n_matches_in_db == len(search_result_details):
+        logging.info("the table already has all matches to upsert, quit importing from csv to phoenix!")
+        return True
+    if n_matches_in_db <= len(search_result_details):
+        logging.info("the table has less matches,  need to import from csv to phoenix!")
+        return False
+    else:
+        logging.info("the table has more matches than csv, need to have a check!")
+        raise Exception("the table has more matches than csv, need to have a check!")
+
+
+
+
 """
-retrive the results and write to output_file or phoenix database
+retrive the search results
 """
 def retrieve_file(project_id, pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
@@ -132,9 +161,7 @@ def write_head_to_file(output_file):
 """
 retrieve the spec_cluster match results and persist them into the tab file
 """
-def retrive_search_result(project_id):
-    input_path = project_id + '/'
-    csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
+def retrive_search_result(project_id, input_path, csv_file):
 
     logging.info("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
     search_results = {}
