@@ -105,7 +105,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
             recomm_seq_sc = max_sc
         matched_spec.append((spec_title, dot, f_val, cluster_id, cluster_size, cluster_ratio, pre_seq, pre_mods,
                             recomm_seq, recomm_mods, conf_sc, recomm_seq_sc))
-    logging.info("Done build_matched_spec")
+    logging.info("Done build_matched_spec, build %d matched spec from %d search results and %d identified spectra."%(len(matched_spec), len(search_results), len(identified_spectra)))
     return matched_spec
 
 """
@@ -182,11 +182,11 @@ def insert_psms_to_phoenix_from_csv(project_id, identified_spectra, psm_csv_file
                  "(spectrum_title, peptide_sequence, modifications)" + \
                  "VALUES (?,?,?)"
 
-    if n_psms_in_db == len(upsert_data):
+    if n_psms_in_db >= len(upsert_data):
         logging.info("the table already has all psms to upsert, quit importing from csv to phoenix!")
         return None
-    logging.info("start to import identification to phoenix db, n_psms_in_db %s != len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
-    print("start to import identification to phoenix db, n_psms_in_db %s != len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
+    logging.info("start to import identification to phoenix db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
+    print("start to import identification to phoenix db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
 #    cursor.executemany(upsert_sql, upsert_data)
     output = os.popen("/usr/local/apache-phoenix-4.11.0-HBase-1.1-bin/bin/psql.py -t %s localhost %s"%(psm_table_name, psm_csv_file)).readlines()
     logging.info(output)

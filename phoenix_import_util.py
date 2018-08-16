@@ -608,7 +608,7 @@ def build_score_psm_table_new(project_id, cluster_data, thresholds, psm_dict, ho
     unid_spec_matched_to_cluster = dict()  # cluster_id as the key
     removed_spec_no = 0
     retail_spec_no = 0
-    logging.info("we have %d matched spec"%(len(psm_dict)))
+    logging.info("Start to  process %d matched spectra in build_score_psm_table_new function."%(len(psm_dict)))
     for spec_title in psm_dict.keys():
         psm = psm_dict.get(spec_title)
         f_val = psm.get('f_val', 0)
@@ -894,12 +894,13 @@ def retrieve_identification_from_phoenix(project_id, host, output_file):
 
 
 def get_ident_no(project_id, host):
-    table_name = "T_" + project_id.upper() + "_PSM"
-    sql_str = "SELECT count(*) FROM " + table_name + "";
-    cursor.execute(sql_str)
-    r = cursor.fetchone()
-    total_n = r[0]
-    return (total_n)
+    pass
+    # table_name = "T_" + project_id.upper() + "_PSM"
+    # sql_str = "SELECT count(*) FROM " + table_name + "";
+    # cursor.execute(sql_str)
+    # r = cursor.fetchone()
+    # total_n = r[0]
+    # return (total_n)
 
 
 def create_project_ana_record_table(host):
@@ -926,6 +927,23 @@ def create_project_ana_record_table(host):
     cursor.execute(create_table_sql)
     cursor.close()
     conn.close()
+
+
+def upsert_analysis_status(analysis_job_id, analysis_status, host):
+    conn = get_conn(host)
+    cursor = conn.cursor()
+    table_name =  "T_ANALYSIS_RECORD"
+    sql_str = "upsert into %s (ID, STATUS) values (%d, '%s')"%(table_name.upper(), int(analysis_job_id), analysis_status)
+    logging.info(sql_str)
+    try:
+        cursor.execute(sql_str)
+        logging.info("Done upsert status  %s for analysis job %d"%(analysis_status, int(analysis_job_id)))
+    except Exception as e:
+        logging.error("error in upserting status  %s for analysis job %d, caused by %s"%(analysis_status, int(analysis_job_id), e))
+    finally:
+        cursor.close()
+        conn.close()
+
 
 
 def test_cluster_select():

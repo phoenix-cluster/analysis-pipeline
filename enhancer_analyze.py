@@ -9,12 +9,14 @@ Usage:
 enhancer_analyze.py --project <projectId>
 [--host <host_name>]
 [--date <date>]
+[--minsize=<minClusterSize>]
 [(--loadfile | --loaddb)]
  enhancer_analyze.py (--help | --version)
 
 Options:
 -p, --project=<projectId>            project to be ananlyzed, the files should be putted in this directory
 --host=<host_name>                   The host phoenix  to store the data and analyze result
+-s, --minsize=<minClusterSize>   minimum cluster size to be matched.
 --date =<date>                       The date to specify the tables
 --loadfile                           If set, load spectra lib search result from pep.xml file.
 --loaddb                             If set, load spectra lib search result from phoenix db.
@@ -37,7 +39,6 @@ import psm_util
 
 
 
-
 def main():
     arguments = docopt(__doc__, version='cluster_phoenix_importer 1.0 BETA')
 
@@ -45,6 +46,8 @@ def main():
     host = "localhost"
     if arguments['--host']:
         host = arguments['--host']
+    min_cluster_size = arguments['--minsize'] or arguments['-s']
+    min_cluster_size = int(min_cluster_size)
 
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
@@ -84,7 +87,7 @@ def main():
 
     psm_util.insert_spec_to_phoenix_from_csv(project_id, spec_file, host) #specs also needs to be import because java pride xml importer don't import to phoenix any more
 
-    cluster_data = cluster_csv.read_csv('clusters_min5.csv')
+    cluster_data = cluster_csv.read_csv('/home/ubuntu/mingze/spec_lib_searching/phospho/clusters_min5.csv')
     if cluster_data == None:
         cluster_data = phoenix.get_cluster_data(lib_search_results, host)
 
@@ -113,6 +116,7 @@ def main():
     start = time.clock()
     phoenix.create_project_ana_record_table(host)
     thresholds = stat_util.default_thresholds
+    thresholds["cluster_size_threshold"] = min_cluster_size
     phoenix.build_score_psm_table_new(project_id, cluster_data, thresholds, matched_spec_details_dict, host, date)
     elapsed = time.clock() - start
     logging.info("%s build score psm table takes time: %f"%(project_id, elapsed))
@@ -125,6 +129,7 @@ def main():
     logging.info(statistics_results)
 
     logging.info('Finished')
+    return 0
 
 if __name__ == "__main__":
     main()

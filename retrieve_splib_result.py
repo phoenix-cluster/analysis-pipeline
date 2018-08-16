@@ -49,7 +49,9 @@ def get_spec_title(mzML_path):
 #write the spectra library search result to csv file
 """
 def write_to_csv(search_results, output_file, fieldnames):
-
+    if len(search_results) <1:
+        logging.info("ERROR, No spectra library search result to write to csv.")
+        return
     with open(output_file, 'w', newline="") as f:
         w = csv.writer(f)
         w.writerow(fieldnames)
@@ -169,6 +171,7 @@ def retrive_search_result(project_id, input_path, csv_file):
 
     if os.path.exists(csv_file) and os.path.getsize(csv_file) > 1:
         search_results = read_csv(csv_file, fieldnames)
+        logging.info("read %d search result from csv file:%s "%(len(search_results), csv_file))
 
     else:
         if os.path.isfile(input_path):
@@ -179,6 +182,7 @@ def retrive_search_result(project_id, input_path, csv_file):
                 search_results.update(search_results_of_file)
             except Exception as error:
                 logging.info("error in retrive search result file in %s"%(error))
+            logging.info("retrived %d search result from .pep.xml files"%(len(search_results)))
         else:
             for file in os.listdir(input_path):
                 if not file.lower().endswith('.pep.xml'):
@@ -190,9 +194,10 @@ def retrive_search_result(project_id, input_path, csv_file):
                     search_results.update(search_results_of_file)
                 except Exception as error:
                     logging.info("error in retrive search result file in %s"%(error))
+            logging.info("retrived %d search result from .pep.xml files"%(len(search_results)))
 
-        write_to_csv(search_results, csv_file, fieldnames)
-
+        if len(search_results) > 0:
+            write_to_csv(search_results, csv_file, fieldnames)
     return search_results
 
 # def main():

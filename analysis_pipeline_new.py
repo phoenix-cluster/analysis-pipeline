@@ -1,13 +1,15 @@
 """ analysis_pipeline.py
 
-This tool import the scan number --> ClusterUniID map to MySQL DB
+This tool search a project against the clusterd spectra to get Confident PSMs and new PSMs
 
 Usage:
-  analysis_pipeline.py --project =<project_id>
-  analysis_pipeline.py (--help | --version)
+  analysis_pipeline.py --project=<project_id>  --minsize=<minClusterSize> [--silent_op=<y|n>]
+  analysis_pipeline.py (--help | --version )
 
 Options:
-  -p, --project=<project_id>        project_id to be processed.
+  -p, --project=<project_id>       project_id to be processed.
+  -s, --minsize=<minClusterSize>   minimum cluster size to be matched.
+  -t, --silent_op=<y|n>            run in silent mode, with default option y|n, use yes for all
   -h, --help                       Print this help message.
   -v, --version                    Print the current version.
 
@@ -20,19 +22,27 @@ import urllib.request
 import json
 import time
 import logging
+file_dir = os.path.dirname(__file__)
+sys.path.append(file_dir)
+import phoenix_import_util as phoenix
+from subprocess import Popen,PIPE,STDOUT
 
 #max number of parallel jobs
 parallel_jobs = 20
 
+#resultFile name with running status
+result_file_name = "resultFiles.txt.started"
+
 def get_result_files(project_id):
     # xmlfiles = glob.glob(project_id+ '/*.xml')
-    result_file_path = project_id + "/resultFiles.txt"
+    result_file_path = project_id + "/" + result_file_name
     result_files = list()
     try:
         with open (result_file_path, 'r') as f:
             for filename in f.readlines():
                 result_files.append(filename.strip())
     except IOError:
+        logging.info('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
         print('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
         project_files_url = "https://www.ebi.ac.uk:443/pride/ws/archive/file/list/project/%s" % (project_id)
         try:
@@ -59,8 +69,10 @@ def get_ms_run_names(result_files):
     for file in result_files:
         if file.lower().endswith(".xml.gz"):
             ms_run_names.append(file[:-7])
+        elif file.lower().endswith(".xml"):
+            ms_run_names.append(file[:-4])
         else:
-            raise Exception("Something wrong with the result file %s" % (file))
+            raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz" % (file))
     return (ms_run_names)
 
 def create_unzip_shell_files(project_id, result_files):
@@ -72,7 +84,7 @@ def create_unzip_shell_files(project_id, result_files):
     with open(unzip_file,"w") as f:
         f.write(cd_shell_path)
         for file in result_files:
-            if os.path.isfile(project_id  + "/" + file):
+            if os.path.isfile(project_id  + "/" + file) and file.endswith(".gz"):
                 temp_index -= 1
                 if temp_index == 0:
                     temp_index = parallel_jobs
@@ -82,8 +94,10 @@ def create_unzip_shell_files(project_id, result_files):
 
             elif os.path.isfile(project_id  + "/" + file[:-3]):
                 continue #this file has been unzipped
+            elif os.path.isfile(project_id  + "/" + file)and file.endswith(".xml"):
+                continue #the uploaded file is unzipped
             else:
-                print("----\n" + file[:-3] + "\n----\n")
+                print("----\n" + file + " is wrong\n----\n")
                 sys.exit()
                 # raise Exception("result file %s is missing" % (file))
 
@@ -176,16 +190,29 @@ def create_spectrast_shell_files(project_id, ms_run_names):
 def main():
     arguments = docopt(__doc__, version='analysis_pipeline.py 1.0 BETA')
     project_id = arguments['--project'] or arguments['-p']
-    print(project_id)
+    min_cluster_size = arguments['--minsize'] or arguments['-s']
+    min_cluster_size = int(min_cluster_size)
+    is_silent = False
+    if arguments['--silent_op'] or arguments['-t']:
+        is_silent = True
+        silent_op = arguments['--silent_op'] or arguments['-t']
     logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to analysis (pipeline) project: " + project_id)
 
     result_files = get_result_files(project_id)
-    ms_run_names = get_ms_run_names(result_files)
+    logging.info("Get %d files from resultFiles.txt for project %s: " %(len(result_files), project_id))
+    logging.info(result_files)
 
+    ms_run_names = get_ms_run_names(result_files)
+    logging.info("Get %d msrun from resultFiles.txt for project %s: " %(len(ms_run_names), project_id))
+    logging.info(ms_run_names)
+
+    phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
 
     unzip_file = project_id + "/unzip.sh"
     redo = ''
+    if is_silent:
+        redo = silent_op
     if os.path.isfile(unzip_file):
         while redo != 'y' and redo != 'n':
             redo = input('the unzip.sh is already there, do you really want to redo the unzip process? y/n')
@@ -203,6 +230,8 @@ def main():
 
     import_file = project_id + "/import_to_phoenix.sh"
     redo = ''
+    if is_silent:
+        redo = silent_op
     if os.path.isfile(import_file):
         while redo != 'y' and redo != 'n':
             redo = input('the import_to_phoenix.sh is already there, do you really want to redo the import process? y/n')
@@ -234,6 +263,8 @@ def main():
 
     convert_file = project_id + "/msconvert.sh"
     redo = ''
+    if is_silent:
+        redo = silent_op
     if os.path.isfile(convert_file):
         while redo != 'y' and redo != 'n':
             redo = input('the msconvert.sh is already there, do you really want to redo the msconvert process? y/n')
@@ -250,6 +281,8 @@ def main():
 
     spectrast_search_file = project_id + "/spectrast_search.sh"
     redo = ''
+    if is_silent:
+        redo = silent_op
     if os.path.isfile(spectrast_search_file):
         while redo != 'y' and redo != 'n':
             redo = input('the spectrast_search.sh is already there, do you really want to redo the spectrast search process? y/n')
@@ -267,11 +300,19 @@ def main():
     print("==--enhancer analyze --==:\n")
     logging.info("==--enhancer analyze --==:\n")
     start = time.time()
-    output = os.popen("/home/ubuntu/mingze/tools/spectra-library-analysis/enhancer_analyze.py -p %s" % (project_id)).readlines()
+    out = Popen(["python3", "/home/ubuntu/mingze/tools/spectra-library-analysis/enhancer_analyze.py", "-p", str(project_id), "-s", str(min_cluster_size)],  stdout=PIPE, stderr=STDOUT)
     end = time.time()
-    print( ''.join(output) + "\n")
-    logging.info(''.join(output) + "\n")
+    stdoutput = out.communicate()[0]
+    return_code = out.returncode
+    print( stdoutput )
+    print( return_code )
+    logging.info(stdoutput)
     logging.info("enhancer analyzing take time %d seconds"%(end - start))
 
+    if return_code == 0:
+        phoenix.upsert_analysis_status(project_id, 'finished', 'localhost')
+        os.rename(project_id + "/" + result_file_name, project_id + "/" + result_file_name[:-8])
+    else:
+        logging.info("This analysis %s is wrong"%project_id)
 if __name__ == "__main__":
     main()
