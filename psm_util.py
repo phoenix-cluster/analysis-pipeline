@@ -182,7 +182,7 @@ def insert_psms_to_phoenix_from_csv(project_id, identified_spectra, psm_csv_file
                  "(spectrum_title, peptide_sequence, modifications)" + \
                  "VALUES (?,?,?)"
 
-    if n_psms_in_db >= len(upsert_data):
+    if n_psms_in_db >= 0.999 * len(upsert_data ):
         logging.info("the table already has all psms to upsert, quit importing from csv to phoenix!")
         return None
     logging.info("start to import identification to phoenix db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
@@ -200,7 +200,8 @@ def insert_psms_to_phoenix_from_csv(project_id, identified_spectra, psm_csv_file
 def insert_spec_to_phoenix_from_csv(project_id, spec_csv_file, host):
     conn = get_conn(host)
     cursor = conn.cursor()
-    spec_table_name = "T_SPECTRUM_TEST"
+    # spec_table_name = "T_SPECTRUM_TEST"
+    spec_table_name = "T_SPECTRUM"
 
     create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + spec_table_name.upper() + "\" (" + \
         "spectrum_title VARCHAR NOT NULL PRIMARY KEY ," + \
@@ -221,7 +222,7 @@ def insert_spec_to_phoenix_from_csv(project_id, spec_csv_file, host):
     output = os.popen("wc -l %s"%spec_csv_file).readline().replace(spec_csv_file, "")
     n_spec_in_csv_file = int(output)
 
-    if n_spec_in_db == n_spec_in_csv_file:
+    if n_spec_in_db >= 0.999 * n_spec_in_csv_file:
         logging.info("the table already has all spec to upsert, quit importing from csv to phoenix!")
         return None
     logging.info("start to import spec to phoenix db")

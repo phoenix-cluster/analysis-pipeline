@@ -929,17 +929,17 @@ def create_project_ana_record_table(host):
     conn.close()
 
 
-def upsert_analysis_status(analysis_job_id, analysis_status, host):
+def upsert_analysis_status(analysis_job_accession, analysis_status, host):
     conn = get_conn(host)
     cursor = conn.cursor()
     table_name =  "T_ANALYSIS_RECORD"
-    sql_str = "upsert into %s (ID, STATUS) values (%d, '%s')"%(table_name.upper(), int(analysis_job_id), analysis_status)
+    sql_str = "upsert into %s (ID, STATUS) values (%d, '%s')"%(table_name.upper(), int(analysis_job_accession[1:]), analysis_status)
     logging.info(sql_str)
     try:
         cursor.execute(sql_str)
-        logging.info("Done upsert status  %s for analysis job %d"%(analysis_status, int(analysis_job_id)))
+        logging.info("Done upsert status  %s for analysis job %s"%(analysis_status, analysis_job_accession))
     except Exception as e:
-        logging.error("error in upserting status  %s for analysis job %d, caused by %s"%(analysis_status, int(analysis_job_id), e))
+        logging.error("error in upserting status  %s for analysis job %s, caused by %s"%(analysis_status, analysis_job_accession, e))
     finally:
         cursor.close()
         conn.close()

@@ -58,6 +58,7 @@ def get_result_files(project_id):
                 with open (result_file_path, 'w') as f:
                     for result_file in result_files:
                         f.write(result_file + "\n")
+                    logging.info("Done of write result files to: " + result_file_path)
         except Exception as err:
             print(err)
             print("Failed to download result files from PRIDE WebService!")
@@ -105,6 +106,7 @@ def create_unzip_shell_files(project_id, result_files):
 
 def create_merge_shell_files(project_id, ms_run_names, type):
     if len(ms_run_names) < 1:
+        logging.error("ms_run_names is empty:" + ms_run_names)
         return
 
     import_file = project_id + "/merge_%s_csv.sh"%type
@@ -120,6 +122,7 @@ def create_merge_shell_files(project_id, ms_run_names, type):
         f.write(command_str)
 
     print("done with creating import_to_phoenix.sh")
+    logging.info("done with creating import_to_phoenix.sh")
 
 def create_import_shell_files(project_id, ms_run_names):
     if len(ms_run_names) < 1:
@@ -193,7 +196,7 @@ def main():
     min_cluster_size = arguments['--minsize'] or arguments['-s']
     min_cluster_size = int(min_cluster_size)
     is_silent = False
-    if arguments['--silent_op'] or arguments['-t']:
+    if arguments.get('--silent_op', False) or arguments.get('-t', False):
         is_silent = True
         silent_op = arguments['--silent_op'] or arguments['-t']
     logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -207,7 +210,10 @@ def main():
     logging.info("Get %d msrun from resultFiles.txt for project %s: " %(len(ms_run_names), project_id))
     logging.info(ms_run_names)
 
-    phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
+    print(project_id)
+    print(project_id.startswith("P"))
+    if not project_id.startswith("P"):
+        phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
 
     unzip_file = project_id + "/unzip.sh"
     redo = ''
@@ -314,5 +320,6 @@ def main():
         os.rename(project_id + "/" + result_file_name, project_id + "/" + result_file_name[:-8])
     else:
         logging.info("This analysis %s is wrong"%project_id)
+        phoenix.upsert_analysis_status(project_id, 'finished_with_error', 'localhost')
 if __name__ == "__main__":
     main()

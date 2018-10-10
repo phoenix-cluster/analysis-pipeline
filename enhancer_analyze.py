@@ -126,7 +126,8 @@ def main():
     statistics_results = stat_util.calc_and_persist_statistics_data(project_id, identified_spectra, host)
     elapsed = time.clock() - start
     logging.info("%s stastics calculation takes time: %f"%(project_id, elapsed))
-    logging.info(statistics_results)
+    get_alpha = lambda x: x[0]
+    logging.info(sorted(statistics_results.items(), key=get_alpha))
 
     logging.info('Finished')
     return 0
