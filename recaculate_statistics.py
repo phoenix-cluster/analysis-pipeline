@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-This program recalculate a project's statistics results
+This program recalculate a project's statistics results, by recreate the views
 Usage:
 recaculate_statistics.py --project <projectId>
 [--host <host_name>]
@@ -15,14 +15,11 @@ Options:
 
 import sys, os
 import logging
-import time,csv
+import time
 from docopt import docopt
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
-import retrieve_splib_result as retriever
-import phoenix_import_util as phoenix
 import statistics_util as stat_util
-import build_cluster_csv as cluster_csv
 import psm_util
 
 
@@ -44,7 +41,7 @@ def main():
     logging.info("Start to recalculate statistics for project: " + project_id)
     thresholds = stat_util.default_thresholds
     start = time.clock()
-    stat_util.create_views_old(project_id, thresholds, date, host)
+    stat_util.create_views(project_id, thresholds, date, host)
 
     print("start to read identification from csv")
     psm_file = project_id + "/" + project_id + "_psm.csv"

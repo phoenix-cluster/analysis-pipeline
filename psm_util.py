@@ -2,16 +2,6 @@ import sys, os
 import csv,json
 import logging
 
-import phoenixdb
-
-"""
-Get connection 
-"""
-def get_conn(host):
-    database_url = 'http://' + host + ':8765/'
-    conn = phoenixdb.connect(database_url, autocommit=True)
-    return conn
-
 def json_stand(string):
     #transfer the string to standard json string
     if string != None:
@@ -154,100 +144,15 @@ def write_matched_spec_to_csv(matched_spec, output_file):
             w.writerow(row)
     logging.info("Done write_matched_spec_to_csv, %d matched details have been written"%len(matched_spec))
 
-def insert_psms_to_phoenix_from_csv(project_id, identified_spectra, psm_csv_file, host):
-    conn = get_conn(host)
-    cursor = conn.cursor()
-    psm_table_name = "T_%s_PSM"%(project_id)
-    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + psm_table_name.upper() + "\" (" + \
-                       "spectrum_title VARCHAR NOT NULL PRIMARY KEY ," + \
-                       "peptide_sequence VARCHAR," + \
-                       "modifications VARCHAR" + \
-                       ")"
-    cursor.execute(create_table_sql)
-
-    query_sql = "SELECT COUNT(*) FROM %s"%(psm_table_name.upper())
-    cursor.execute(query_sql)
-    n_psms_in_db = cursor.fetchone()[0]
-    #todo remove this part to reduce computing time
-    upsert_data = []
-    for spec_title in identified_spectra.keys():
-        psm = identified_spectra.get(spec_title)
-        if spec_title == None or len(spec_title) < 1:
-            logging.info("spec_title %s error in %s"%(spec_title,psm))
-            print("spec_title %s error in %s"%(spec_title,psm))
-            continue
-
-        upsert_data.append((spec_title, psm.get('peptideSequence'), psm.get('modifications')))
-    upsert_sql = "UPSERT INTO \"" + psm_table_name.upper() + "\"" \
-                 "(spectrum_title, peptide_sequence, modifications)" + \
-                 "VALUES (?,?,?)"
-
-    if n_psms_in_db >= 0.999 * len(upsert_data ):
-        logging.info("the table already has all psms to upsert, quit importing from csv to phoenix!")
-        return None
-    logging.info("start to import identification to phoenix db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
-    print("start to import identification to phoenix db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
-#    cursor.executemany(upsert_sql, upsert_data)
-    output = os.popen("/usr/local/apache-phoenix-4.11.0-HBase-1.1-bin/bin/psql.py -t %s localhost %s"%(psm_table_name, psm_csv_file)).readlines()
-    logging.info(output)
-    print(output)
-
-    cursor.close()
-    conn.close()
-
-    logging.info("Done import psms to phoenix from csv, %d psm have been imported"%(len(upsert_data)))
-
-def insert_spec_to_phoenix_from_csv(project_id, spec_csv_file, host):
-    conn = get_conn(host)
-    cursor = conn.cursor()
-    # spec_table_name = "T_SPECTRUM_TEST"
-    spec_table_name = "T_SPECTRUM"
-
-    create_table_sql = "CREATE TABLE IF NOT EXISTS \"" + spec_table_name.upper() + "\" (" + \
-        "spectrum_title VARCHAR NOT NULL PRIMARY KEY ," + \
-        "precursor_mz FLOAT," + \
-        "precursor_intens FLOAT," + \
-        "charge INTEGER," + \
-        "peaklist_mz VARCHAR," + \
-        "peaklist_intens VARCHAR" + \
-        ")"
-    cursor.execute(create_table_sql)
-
-
-    query_sql = "SELECT COUNT(*) FROM %s where SPECTRUM_TITLE like '%s%%'"%(spec_table_name.upper(), project_id.upper() )
-    cursor.execute(query_sql)
-    n_spec_in_db = cursor.fetchone()[0]
-    #todo remove this part to reduce computing time
-
-    output = os.popen("wc -l %s"%spec_csv_file).readline().replace(spec_csv_file, "")
-    n_spec_in_csv_file = int(output)
-
-    if n_spec_in_db >= 0.999 * n_spec_in_csv_file:
-        logging.info("the table already has all spec to upsert, quit importing from csv to phoenix!")
-        return None
-    logging.info("start to import spec to phoenix db")
-    print("start to import spec to phoenix db")
-#    cursor.executemany(upsert_sql, upsert_data)
-
-    output = os.popen("/usr/local/apache-phoenix-4.11.0-HBase-1.1-bin/bin/psql.py -t %s localhost %s"%(spec_table_name, spec_csv_file)).readlines()
-    logging.info(output)
-    print(output)
-
-    cursor.close()
-    conn.close()
-
-    logging.info("Done import spec to phoenix from csv, %d spec have been imported"%(n_spec_in_csv_file))
-
-
 
 def read_matched_spec_from_csv(csv_file):
     if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
         return None
     with open(csv_file, 'r') as f:
         new_dict = {}
-        reader = csv.reader(f, delimiter=',')
+        reader = csv.reader(f, delimiter=',',skipinitialspace=True)
         fieldnames = next(reader)
-        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',')
+        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',', skipinitialspace=True)
         for row in reader:
             spec_title = row.pop('spec_title')
             row['dot'] = float(row.get("dot"))
@@ -275,10 +180,9 @@ def read_identification_from_csv(csv_file):
     logging.info("start to read identification from csv")
     with open(csv_file, 'r') as f:
         new_dict = {}
-        reader = csv.reader(f, delimiter=',')
         fieldnames = ['spectrumTitle', 'peptideSequence', 'modifications']
 
-        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',')
+        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',', skipinitialspace=True)
         for row in reader:
             spec_title = row.pop('spectrumTitle')
 

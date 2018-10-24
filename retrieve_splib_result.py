@@ -5,15 +5,17 @@ This library get the target spectra and search hits from the spectra library, an
 The library is built from the PRIDE Cluster consensus spectra without identified information to use.
 
 """
-import os
+import os,sys
 import xml.etree.ElementTree as ET
 import csv
 import logging
-import phoenixdb
+file_dir = os.path.dirname(__file__)
+sys.path.append(file_dir)
+import mysql_storage_access as mysql_acc
+#import phoenixdb
 
 def get_conn(host):
-    database_url = 'http://' + host + ':8765/'
-    conn = phoenixdb.connect(database_url, autocommit=True)
+    conn = mysql_acc.get_conn(host)
     return conn
 
 
@@ -71,12 +73,12 @@ def read_csv(csv_file, fieldnames):
         return None
     with open(csv_file, 'r') as f:
         new_dict = {}
-        reader = csv.reader(f, delimiter=',')
+        reader = csv.reader(f, delimiter=',', skipinitialspace=True)
         fieldnames_from_file = next(reader)
         if str(fieldnames_from_file) != str(fieldnames):
             raise Exception("the fields name not matched: " + str(fieldnames) + " vs. " + str(fieldnames_from_file))
 
-        reader = csv.DictReader(f, fieldnames=fieldnames_from_file, delimiter=',')
+        reader = csv.DictReader(f, fieldnames=fieldnames_from_file, delimiter=',', skipinitialspace=True)
         for row in reader:
             spec_title = row.pop('spec_title')
             new_dict[spec_title] = row
@@ -84,24 +86,30 @@ def read_csv(csv_file, fieldnames):
     logging.info("Read %d lines from spectra library search result file %s"%(len(new_dict), csv_file))
 
 
-def table_is_equal_to_csv(project_id, search_result_details, host, date):
+def table_is_equal_to_csv(project_id, search_result_details, host):
     conn = get_conn(host)
     cursor = conn.cursor()
     match_table_name = "T_" + project_id + "_spec_cluster_match"
 
     query_sql = "SELECT COUNT(*) FROM %s"%(match_table_name.upper())
-    cursor.execute(query_sql)
-    n_matches_in_db = cursor.fetchone()[0]
-    if n_matches_in_db == len(search_result_details):
-        logging.info("the table already has all matches to upsert, quit importing from csv to phoenix!")
-        return True
-    if n_matches_in_db <= len(search_result_details):
-        logging.info("the table has less matches,  need to import from csv to phoenix!")
+    try:
+        cursor.execute(query_sql)
+        n_matches_in_db = cursor.fetchone()[0]
+        if n_matches_in_db == len(search_result_details):
+            logging.info("the table already has all matches to upsert, quit importing from csv to phoenix!")
+            return True
+        if n_matches_in_db <= len(search_result_details):
+            logging.info("the table has less matches,  need to import from csv to phoenix!")
+            return False
+        else:
+            logging.info("the table has more matches than csv, need to have a check!")
+            raise Exception("the table has more matches than csv, need to have a check!")
+    except Exception as e:
+        logging.error("ERROR: faild to select from match_table_name ( " + str(e))
         return False
-    else:
-        logging.info("the table has more matches than csv, need to have a check!")
-        raise Exception("the table has more matches than csv, need to have a check!")
-
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
