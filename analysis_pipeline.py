@@ -22,9 +22,10 @@ import urllib.request
 import json
 import time
 import logging
+import configparser
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
-import phoenix_storage_access as phoenix
+#import phoenix_storage_access as phoenix
 import mysql_storage_access as mysql_acc
 from subprocess import Popen,PIPE,STDOUT
 
@@ -33,6 +34,9 @@ parallel_jobs = 20
 
 #resultFile name with running status
 result_file_name = "resultFiles.txt.started"
+
+config = configparser.ConfigParser()
+config.read("%s/config.ini"%(file_dir))
 
 def get_result_files(project_id):
     # xmlfiles = glob.glob(project_id+ '/*.xml')
@@ -43,9 +47,14 @@ def get_result_files(project_id):
             for filename in f.readlines():
                 result_files.append(filename.strip())
     except IOError:
+        if project_id.startswith("E"):
+            logging.info('resultFiles.txt does not exist for Enhancer Project %s! \nAbort pipeline.'%(project_id))
+            print('resultFiles.txt does not exist for Enhancer Project %s! \nAbort pipeline.'%(project_id))
+            sys.exit(0)
+
         logging.info('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
         print('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
-        project_files_url = "https://www.ebi.ac.uk:443/pride/ws/archive/file/list/project/%s" % (project_id)
+        project_files_url = config.get("Urls","project_files_url")  + project_id
         try:
             with urllib.request.urlopen(project_files_url) as response:
                 resp_str = response.read().decode('utf-8')
@@ -86,7 +95,8 @@ def create_unzip_shell_files(project_id, result_files):
     with open(unzip_file,"w") as f:
         f.write(cd_shell_path)
         for file in result_files:
-            if os.path.isfile(project_id  + "/" + file) and file.endswith(".gz"):
+            file_path = project_id  + "/" + file
+            if os.path.isfile(file_path) and file.endswith(".gz"):
                 temp_index -= 1
                 if temp_index == 0:
                     temp_index = parallel_jobs
@@ -99,7 +109,7 @@ def create_unzip_shell_files(project_id, result_files):
             elif os.path.isfile(project_id  + "/" + file)and file.endswith(".xml"):
                 continue #the uploaded file is unzipped
             else:
-                print("----\n" + file + " is wrong\n----\n")
+                print("----\n" + file + " is wrong in unzip step\n----\n")
                 sys.exit()
                 # raise Exception("result file %s is missing" % (file))
 
@@ -107,7 +117,7 @@ def create_unzip_shell_files(project_id, result_files):
 
 def create_merge_shell_files(project_id, ms_run_names, type):
     if len(ms_run_names) < 1:
-        logging.error("ms_run_names is empty:" + ms_run_names)
+        logging.error("ms_run_names is empty")
         return
 
     import_file = project_id + "/merge_%s_csv.sh"%type
@@ -125,18 +135,20 @@ def create_merge_shell_files(project_id, ms_run_names, type):
     print("done with creating merge.sh")
     logging.info("done with creating merge.sh")
 
-def create_import_shell_files(project_id, ms_run_names):
+def create_convert_pridexml_to_csv_shell_files(project_id, ms_run_names):
     if len(ms_run_names) < 1:
         return
 
-    import_file = project_id + "/import_to_db.sh"
+    shell_file = project_id + "/convert_pridexml_to_csv.sh"
 
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
-    command_str = "java -jar /home/ubuntu/mingze/tools/pridexml-to-phoenix/target/pridexml-to-phoenix-1.0-SNAPSHOT.jar " + \
+    converter= config.get("PipeLine", "pride_xml_converter")
+
+    command_str = "java -jar %s " + \
                    " -m -csv -p %s -i \"%s\" %s\n" #no importing to db here
 #                   " -m -csv -ph -p %s -i \"%s\" %s\n"
 
-    with open(import_file,"w") as f:
+    with open(shell_file,"w") as f:
         f.write(cd_shell_path)
         f.write("rm %s_psm.csv \n" % (project_id))
         f.write("rm %s_spec.csv \n" % (project_id))
@@ -147,9 +159,9 @@ def create_import_shell_files(project_id, ms_run_names):
             temp_index -= 1
             if temp_index == 0:
                 temp_index = temp_n_parallel_jobs
-                f.write(command_str % (project_id, file_name, ';'))
+                f.write(command_str % (converter, project_id, file_name, ';'))
             else:
-                f.write(command_str % (project_id, file_name, '&'))
+                f.write(command_str % (converter, project_id, file_name, '&'))
 
         print("done with creating import_to_db.sh")
 
@@ -166,9 +178,9 @@ def create_convert_shell_files(project_id, ms_run_names):
             temp_index -= 1
             if temp_index == 0:
                 temp_index = parallel_jobs
-                f.write("/usr/local/tpp/bin/msconvert \"%s\" --mzML -o %s ;\n" % (file_name, "./"))
+                f.write("%s \"%s\" --mzML -o %s ;\n" % (config.get("PipeLine","msconvert"), file_name, "./"))
             else:
-                f.write("/usr/local/tpp/bin/msconvert \"%s\" --mzML -o %s &\n" % (file_name, "./"))
+                f.write("%s \"%s\" --mzML -o %s &\n" % (config.get("PipeLine","msconvert"),file_name, "./"))
         print("Done with creating msconvert.sh")
 
 def create_spectrast_shell_files(project_id, ms_run_names):
@@ -179,16 +191,18 @@ def create_spectrast_shell_files(project_id, ms_run_names):
     with open(spectrast_search_file,"w") as f:
         f.write(cd_shell_path)
         temp_index = parallel_jobs
+        spectrast = config.get("PipeLine","spectrast")
+        speclib_file = config.get("PipeLine","speclib_file")
         for ms_run_name in ms_run_names:
             file_name = "%s.mzML" % (ms_run_name)
             temp_index -= 1
             if temp_index == 0:
                 temp_index = parallel_jobs
-                f.write("/usr/local/tpp/bin/spectrast -sL /home/ubuntu/mingze/spec_lib_searching/201504-spec-lib-nofilter/201504_nofil_min5.splib\
-                    \"%s\" ;\n" %(file_name))
+                f.write("%s -sL %s\
+                    \"%s\" ;\n" %(spectrast, speclib_file, file_name))
             else:
-                f.write("/usr/local/tpp/bin/spectrast -sL /home/ubuntu/mingze/spec_lib_searching/201504-spec-lib-nofilter/201504_nofil_min5.splib\
-                    \"%s\" &\n" %(file_name))
+                f.write("%s -sL %s\
+                    \"%s\" &\n" %(spectrast, speclib_file, file_name))
         print("done with creating spectrast_search.sh")
 
 def main():
@@ -200,7 +214,7 @@ def main():
     if arguments.get('--silent_op', False) or arguments.get('-t', False):
         is_silent = True
         silent_op = arguments['--silent_op'] or arguments['-t']
-    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to analysis (pipeline) project: " + project_id)
 
     result_files = get_result_files(project_id)
@@ -212,10 +226,9 @@ def main():
     logging.info(ms_run_names)
 
     print(project_id)
-    print(project_id.startswith("P"))
     if not project_id.startswith("P"):
         # phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
-        mysql_acc.upsert_analysis_status(project_id, 'started', 'localhost')
+        mysql_acc.upsert_analysis_status(project_id, 'started')
 
     unzip_file = project_id + "/unzip.sh"
     redo = ''
@@ -227,8 +240,8 @@ def main():
     if redo == 'y' or redo == '':
         create_unzip_shell_files(project_id, result_files)
         start = time.time()
-        print("==--unzip--==:\n")
-        logging.info("==--unzip--==:\n")
+        print("==--Starting unzip--==:\n")
+        logging.info("==--Starting unzip--==:\n")
         output = os.popen('sh '+ project_id + "/unzip.sh").readlines()
         end = time.time()
         print(''.join(output) + "\n")
@@ -236,50 +249,48 @@ def main():
         logging.info("unziping take time %d seconds"%(end - start))
 
 
-    import_file = project_id + "/import_to_db.sh"
+    convert_to_csv_shell = project_id + "/convert_pridexml_to_csv.sh"
     redo = ''
     if is_silent:
         redo = silent_op
-    if os.path.isfile(import_file):
+    if os.path.isfile(convert_to_csv_shell):
         while redo != 'y' and redo != 'n':
-            redo = input('the import_to_db.sh is already there, do you really want to redo the import process? y/n')
+            redo = input('the convert_pridexml_to_csv.sh is already there, do you really want to redo the convert to csv process? y/n')
     if redo == 'y' or redo == '':
-        create_import_shell_files(project_id, ms_run_names)
+        create_convert_pridexml_to_csv_shell_files(project_id, ms_run_names)
         start = time.time()
-        print("==--import--==:\n")
-        logging.info("==--import--==:\n")
-        output1 = os.popen('sh '+ project_id + "/import_to_db.sh").readlines()
-        print("==--import--==:\n" + ''.join(output1) + "\n")
-        logging.info("==--import--==:\n" + ''.join(output1) + "\n")
-
+        print("==--Starting convert spectra & psm files --==:\n")
+        logging.info("==--Starting convert spectra & psm files --==:\n")
+        output1 = os.popen('sh '+ project_id + "/convert_pridexml_to_csv.sh").readlines()
+        end = time.time()
+        logging.info("convert to spectra/psm csv take time %d seconds"%(end - start))
+        """
         create_merge_shell_files(project_id, ms_run_names, 'psm')
         create_merge_shell_files(project_id, ms_run_names, 'spec')
-        print("==--merge psm--==:\n" )
-        logging.info("==--merge psm--==:\n")
+        print("==--Starting merge psm--==:\n" )
+        logging.info("==--Starting merge psm--==:\n")
         output2 = os.popen('sh '+ project_id + "/merge_psm_csv.sh").readlines()
         print(''.join(output2) + "\n")
         logging.info(''.join(output2) + "\n")
 
-        print("==--merge spec--==:\n")
-        logging.info("==--merge spec--==:\n")
+        print("==--Starting merge spec--==:\n")
+        logging.info("==--Starting merge spec--==:\n")
         output3 = os.popen('sh '+ project_id + "/merge_spec_csv.sh").readlines()
         print( ''.join(output3) + "\n")
         logging.info(''.join(output3) + "\n")
+        """
 
-        end = time.time()
-        logging.info("importing to mgf/csv take time %d seconds"%(end - start))
-
-    convert_file = project_id + "/msconvert.sh"
+    convert_to_mzml_file = project_id + "/msconvert.sh"
     redo = ''
     if is_silent:
         redo = silent_op
-    if os.path.isfile(convert_file):
+    if os.path.isfile(convert_to_mzml_file):
         while redo != 'y' and redo != 'n':
             redo = input('the msconvert.sh is already there, do you really want to redo the msconvert process? y/n')
     if redo == 'y' or redo == '':
         create_convert_shell_files(project_id, ms_run_names)
         start = time.time()
-        logging.info("==--msconvert--==:\n" )
+        logging.info("==--Starting msconvert--==:\n" )
         output = os.popen('sh '+ project_id + "/msconvert.sh").readlines()
         end = time.time()
         print( ''.join(output) + "\n")
@@ -297,33 +308,34 @@ def main():
     if redo == 'y' or redo == '':
         create_spectrast_shell_files(project_id, ms_run_names)
         start = time.time()
-        print("==--start spectrast search--==:\n")
-        logging.info("==--spectrast search--==:\n")
+        print("==--Starting start spectrast search--==:\n")
+        logging.info("==--Starting spectrast search--==:\n")
         output = os.popen('sh '+ project_id + "/spectrast_search.sh").readlines()
         end = time.time()
         print(''.join(output) + "\n")
         logging.info(''.join(output) + "\n")
         logging.info("spectrast searching take time %d seconds"%(end - start))
     #
-    print("==--enhancer analyze --==:\n")
-    logging.info("==--enhancer analyze --==:\n")
+    print("==--Starting enhancer analyze --==:\n")
+    logging.info("==--Starting enhancer analyze --==:\n")
     start = time.time()
-    out = Popen(["python3", "/home/ubuntu/mingze/tools/spectra-library-analysis/enhancer_analyze.py", "-p", str(project_id), "-s", str(min_cluster_size)],  stdout=PIPE, stderr=STDOUT)
+    file_dir = os.path.dirname(__file__)
+    out = Popen(["python3", "%s/enhancer_analyze.py"%(file_dir), "-p", str(project_id), "-s", str(min_cluster_size)],  stdout=PIPE, stderr=STDOUT)
     end = time.time()
-    stdoutput = out.communicate()[0]
+    stdoutput = str(out.communicate()[0])
+    stdoutput = stdoutput.replace('\\n', "\n")
     return_code = out.returncode
     print( stdoutput )
-    print( return_code )
     logging.info(stdoutput)
     logging.info("enhancer analyzing take time %d seconds"%(end - start))
 
     if return_code == 0:
         #phoenix.upsert_analysis_status(project_id, 'finished', 'localhost')
-        mysql_acc.upsert_analysis_status(project_id, 'finished', 'localhost')
+        mysql_acc.upsert_analysis_status(project_id, 'finished')
         os.rename(project_id + "/" + result_file_name, project_id + "/" + result_file_name[:-8])
     else:
         logging.info("This analysis %s is wrong"%project_id)
         #phoenix.upsert_analysis_status(project_id, 'finished_with_error', 'localhost')
-        mysql_acc.upsert_analysis_status(project_id, 'finished_with_error', 'localhost')
+        mysql_acc.upsert_analysis_status(project_id, 'finished_with_error')
 if __name__ == "__main__":
     main()

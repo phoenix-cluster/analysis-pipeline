@@ -7,7 +7,6 @@ recaculate_statistics.py --project <projectId>
 
 Options:
 -p, --project=<projectId>            project to be ananlyzed, the files should be putted in this directory
---host=<host_name>                   The host phoenix  to store the data and analyze result
 -h, --help                           Print this help message.
 -v, --version                        Print the current version.
 """
@@ -28,9 +27,6 @@ def main():
     arguments = docopt(__doc__, version='cluster_phoenix_importer 1.0 BETA')
 
     project_id = arguments['--project']
-    host = "localhost"
-    if arguments['--host']:
-        host = arguments['--host']
 
     date = ''
 
@@ -41,13 +37,13 @@ def main():
     logging.info("Start to recalculate statistics for project: " + project_id)
     thresholds = stat_util.default_thresholds
     start = time.clock()
-    stat_util.create_views(project_id, thresholds, date, host)
+    stat_util.create_views(project_id, thresholds, date)
 
     print("start to read identification from csv")
     psm_file = project_id + "/" + project_id + "_psm.csv"
     identified_spectra  = psm_util.read_identification_from_csv(psm_file)
 
-    statistics_results = stat_util.calc_and_persist_statistics_data(project_id, identified_spectra, host)
+    statistics_results = stat_util.calc_and_persist_statistics_data(project_id, identified_spectra)
     elapsed = time.clock() - start
     logging.info("%s stastics calculation takes time: %f"%(project_id, elapsed))
     logging.info(statistics_results)

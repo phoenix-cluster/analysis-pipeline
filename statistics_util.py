@@ -24,11 +24,11 @@ default_thresholds = {
 
 
 
-def create_views(project_id, thresholds,host):
+def create_views(project_id, thresholds):
     """"""
-    conn = mysql_acc.get_conn(host)
+    conn = mysql_acc.get_conn()
     cursor = conn.cursor()
-    mysql_acc.create_project_ana_record_table(host)
+    mysql_acc.create_project_ana_record_table()
     new_psm_view_name = "V_" + project_id.upper() + "_" + "NEW_PSM";
     pos_sc_psms_view_name = "V_" + project_id.upper() + "_" + "P_SCORE_PSM";
     neg_sc_psms_view_name = "V_" + project_id.upper() + "_" + "N_SCORE_PSM";
@@ -92,7 +92,7 @@ def create_views(project_id, thresholds,host):
 
     #persist the thresholds to  db
 #    phoenix.insert_thresholds_to_record(cursor, project_id, thresholds)
-    mysql_acc.insert_thresholds_to_record(cursor, project_id, thresholds)
+    mysql_acc.insert_thresholds_to_record(project_id, thresholds)
     conn.commit()
     cursor.close()
     conn.close()
@@ -138,11 +138,10 @@ def get_matched_id_spec_no(project_id, identified_spectra, cursor):
     # return rs[0]
 
 
-def calc_and_persist_statistics_data(project_id, identified_spectra, host):
+def calc_and_persist_statistics_data(project_id, identified_spectra):
     """
 
     :param project_id:
-    :param host:
     :return:
 
 
@@ -156,7 +155,7 @@ def calc_and_persist_statistics_data(project_id, identified_spectra, host):
 
     """
 #    conn = phoenix.get_conn(host)
-    conn = mysql_acc.get_conn(host)
+    conn = mysql_acc.get_conn()
     cursor = conn.cursor()
 
     statistics_results = dict()

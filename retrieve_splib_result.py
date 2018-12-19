@@ -14,8 +14,8 @@ sys.path.append(file_dir)
 import mysql_storage_access as mysql_acc
 #import phoenixdb
 
-def get_conn(host):
-    conn = mysql_acc.get_conn(host)
+def get_conn():
+    conn = mysql_acc.get_conn()
     return conn
 
 
@@ -86,8 +86,8 @@ def read_csv(csv_file, fieldnames):
     logging.info("Read %d lines from spectra library search result file %s"%(len(new_dict), csv_file))
 
 
-def table_is_equal_to_csv(project_id, search_result_details, host):
-    conn = get_conn(host)
+def table_is_equal_to_csv(project_id, search_result_details):
+    conn = get_conn()
     cursor = conn.cursor()
     match_table_name = "T_" + project_id + "_spec_cluster_match"
 

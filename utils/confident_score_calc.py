@@ -223,7 +223,7 @@ def calculate_conf_sc_for_a_cluster(cluster):
     # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
     cluster_id = cluster['id']
     ratio = cluster['ratio']
-    n_spec = cluster['n_spec']
+    n_spec = cluster['size']
     seqs_ratios_str = cluster['seqs_ratios']
 
     if n_spec > 1000:
@@ -243,6 +243,7 @@ def calculate_conf_sc_for_a_cluster(cluster):
     ratios = dict()
     sum_ratio = 0.0
     allUpper = re.compile(r'[^A-Z]')
+    il_ratios = dict()
     for seq in seqs_ratios.keys():
         if allUpper.match(seq):
             print(allUpper.match(seq))
@@ -250,27 +251,32 @@ def calculate_conf_sc_for_a_cluster(cluster):
 
         ratios[seq] = float(seqs_ratios.get(seq))
         sum_ratio += ratios[seq]
-        if ratios[seq] > max_seq_ratio:
-            max_seq_ratio = float(ratios[seq])
-            max_seq = seq
+        # if ratios[seq] > max_seq_ratio:
+        #     max_seq_ratio = float(ratios[seq])
+        #     max_seq = seq
 
+        #I/L peptides in one cluster, should prepare the il_ratios for i/l peptide
+        il_seq = seq.replace("I", "L")
+        il_ratio_score = il_ratios.get(il_seq, 0)
+        il_ratios[il_seq] = il_ratio_score + float(seqs_ratios.get(seq))
 
-    if max_seq_ratio > ratio + 0.01 or max_seq_ratio < ratio - 0.01:
-        raise Exception("The max-seq_ratio is not equal to the ratio in database with cluster %s : %s, %f"%(cluster_id, seqs_ratios_str, ratio))
+    # if max_seq_ratio > ratio + 0.01 or max_seq_ratio < ratio - 0.01:
+    #     print("The max-seq_ratio is not equal to the ratio in database with cluster %s : %s, %f"%(cluster_id, seqs_ratios_str, ratio))
 
     #some time, multiple sequences could be assigned to one spectrum, cause a sum of ratios more than 1.
-    #for this situation, we re set the ratios by dividing make the all ratios to be 1
+    #for this situation, we set the ratios by dividing make the all ratios to be 1
     if sum_ratio > 1.001:
         # print("old ratios: " + str(ratios) + " for cluster " + cluster_id)
-        for seq in ratios:
-            ratios[seq] = ratios[seq]/sum_ratio
+        for il_seq in il_ratios:
+            il_ratios[il_seq] = il_ratios[il_seq]/sum_ratio
         # print("new ratios divied by a factor: " + str(ratios) + " for cluster " + cluster_id)
 
     #calculating the confidence scores for the seq in cluster
     confidence_scores = dict()
     for seq in ratios.keys():
-        other_ratios = ratios.copy()
-        this_ratio = other_ratios.pop(seq)
+        il_seq = seq.replace("I", "L")
+        other_ratios = il_ratios.copy()
+        this_ratio = other_ratios.pop(il_seq)
         sum_sqr_of_others = 0.0
         for other_ratio in other_ratios.values():
             sum_sqr_of_others += pow(other_ratio,2)
@@ -283,10 +289,10 @@ def calculate_conf_sc_for_a_cluster(cluster):
     #calculating the confidence scores for the non-exist seq
     this_ratio = 1.0/(n_spec + 1)
     adjust_factor = n_spec/(n_spec + 1.0)
-    for akey in ratios.keys():
-        ratios[akey] *= adjust_factor
+    for akey in il_ratios.keys():
+        il_ratios[akey] *= adjust_factor
     sum_sqr_of_others = 0.0
-    for other_ratio in ratios.values():
+    for other_ratio in il_ratios.values():
         sum_sqr_of_others += pow(other_ratio,2)
     sqrt_of_others = math.sqrt(sum_sqr_of_others)
     confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)

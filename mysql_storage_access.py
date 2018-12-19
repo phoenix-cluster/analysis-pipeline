@@ -2,37 +2,50 @@ import pymysql
 import time
 import os, sys, json
 import logging
+import configparser
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 
-cluster_table = "V_CLUSTER"
-lib_spec_table = cluster_table + "_SPEC"
+config = configparser.ConfigParser()
+config.read("%s/config.ini"%(file_dir))
+
+cluster_table = config.get("Database", "cluster_table")
+lib_spec_table = config.get("Database", "lib_spec_table")
 
 """
 Get connection 
 """
-def get_conn(host):
-    conn = pymysql.connect(host = host, port=3309,
-                           user="phoenix_enhancer",
-                           passwd="enhancer123",
-                           db="phoenix_enhancer",
-                           autocommit=True,
-                           local_infile=1)
+def get_conn():
+
+    database_para = config["Database"]
+    host = database_para.get("host")
+    port = database_para.get("port")
+    user = database_para.get("user")
+    passwd = database_para.get("passwd")
+    db = database_para.get("db")
+    autocommit = database_para.get("autocommit")
+    local_infile = database_para.get("local_infile")
+    conn = pymysql.connect(host = host, port=int(port),
+                           user=user,
+                           passwd=passwd,
+                           db=db,
+                           autocommit=autocommit,
+                           local_infile=int(local_infile))
     return conn
 
 
 """
 Read cluster data from mysql db tables
 """
-def get_cluster_data(search_results, host):
+def get_cluster_data(search_results):
     cluster_data = dict()
-    conn = get_conn(host)
+    conn = get_conn()
     cursor = conn.cursor()
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
-        cluster_query_sql = "SELECT CLUSTER_RATIO, N_ID_SPEC, CONF_SC, SEQUENCES_RATIOS FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
+        cluster_query_sql = "SELECT CLUSTER_RATIO, N_ID, CONF_SC, SEQUENCES_RATIOS FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
         # print(cluster_query_sql)
         cursor.execute(cluster_query_sql)
         result = cursor.fetchone()
@@ -50,12 +63,13 @@ def get_cluster_data(search_results, host):
 """
 Read cluster data from mysql db tables
 """
-def get_all_clusters(host, cluster_table_name, min_size):
+def get_all_clusters(cluster_table_name, min_size=5):
     cluster_data = list()
-    conn = get_conn(host)
+    conn = get_conn()
     cursor = conn.cursor()
-    cluster_query_sql = "SELECT CLUSTER_ID, CLUSTER_RATIO, N_ID_SPEC, SEQUENCES_RATIOS, CONF_SC, SEQUENCES_MODS FROM " + cluster_table_name
-    cluster_query_sql += " where N_ID_SPEC >= " + str(min_size)
+    cluster_query_sql = "SELECT CLUSTER_ID, CLUSTER_RATIO, N_ID, SEQUENCES_RATIOS, CONF_SC, SEQUENCES_MODS FROM " + cluster_table_name
+    cluster_query_sql += " where N_ID>= " + str(min_size)
+    # cluster_query_sql += " limit 1000"
     cursor.execute(cluster_query_sql)
     rs = cursor.fetchall()
     for r in rs:
@@ -79,16 +93,15 @@ def get_all_clusters(host, cluster_table_name, min_size):
 """
 Upsert the clusters' confidence scores to cluster table
 """
-def upsert_cluster_conf_sc(host, cluster_table_name, clusters):
-    conn = get_conn(host)
+def upsert_cluster_conf_sc(cluster_table_name, clusters):
+    conn = get_conn()
     cursor = conn.cursor()
     upsert_data = []
-    upsert_sql = "replace into " + cluster_table_name + "" \
-                 "(cluster_id, conf_sc)" + \
-                 "VALUES (?,?)"
+    upsert_sql = "update " + cluster_table_name + " set " \
+                 "conf_sc = %s  where cluster_id = %s "
 
     for cluster in clusters:
-        upsert_data.append((cluster['id'], cluster['conf_sc']))
+        upsert_data.append((cluster['conf_sc'],cluster['id']))
 
     cursor.executemany(upsert_sql, upsert_data)
     cursor.close()
@@ -98,8 +111,8 @@ def upsert_cluster_conf_sc(host, cluster_table_name, clusters):
 """
 Upsert statistics data of a project to mysql db table
 """
-def upsert_statistics_to_db(project_id, host, statistics_results):
-    conn = get_conn(host)
+def upsert_statistics_to_db(project_id, statistics_results):
+    conn = get_conn()
     cursor = conn.cursor()
 
     statistics_table_name = "T_project_analysis_result".upper()
@@ -120,7 +133,7 @@ def upsert_statistics_to_db(project_id, host, statistics_results):
                        ")"
     cursor.execute(create_table_sql)
 
-    upsert_sql = "replace into " + statistics_table_name + "(project_id, cluster_size_threshold, cluster_ratio_threshold, conf_sc_threshold, spectrast_fval_threshold, prePSM_no, prePSM_not_matched_no, prePSM_high_conf_no, prePSM_low_conf_no, better_PSM_no, new_PSM_no, matched_spec_no, matched_id_spec_no) VALUES ('%s', %d, %f, %f, %f, %d, %d, %d, %d, %d, %d, %d, %d)" % (
+    upsert_sql = "insert into " + statistics_table_name + "(project_id, cluster_size_threshold, cluster_ratio_threshold, conf_sc_threshold, spectrast_fval_threshold, prePSM_no, prePSM_not_matched_no, prePSM_high_conf_no, prePSM_low_conf_no, better_PSM_no, new_PSM_no, matched_spec_no, matched_id_spec_no) VALUES ('%s', %d, %f, %f, %f, %d, %d, %d, %d, %d, %d, %d, %d)" % (
         statistics_results.get('project_id '),
         statistics_results.get('cluster_size_threshold'),
         statistics_results.get('cluster_ratio_threshold'),
@@ -171,8 +184,8 @@ def json_stand(string):
 """
 Upsert search result of a project to mysql db table
 """
-def upsert_matched_spec_table(project_id, matched_spec_details, host):
-    conn = get_conn(host)
+def upsert_matched_spec_table(project_id, matched_spec_details):
+    conn = get_conn()
     cursor = conn.cursor()
     match_table_name = "T_" + project_id.upper() + "_spec_cluster_match".upper()
 
@@ -199,7 +212,7 @@ def upsert_matched_spec_table(project_id, matched_spec_details, host):
 
 
 #    upsert_sql = "replace into " + match_table_name + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    upsert_sql = "REPLACE INTO " + match_table_name.upper() + " (spec_title,dot,f_val,cluster_id,cluster_size,cluster_ratio,pre_seq,pre_mods, recomm_seq, recomm_mods, conf_sc, recomm_seq_sc)" + \
+    upsert_sql = "INSERT INTO " + match_table_name.upper() + " (spec_title,dot,f_val,cluster_id,cluster_size,cluster_ratio,pre_seq,pre_mods, recomm_seq, recomm_mods, conf_sc, recomm_seq_sc)" + \
                     "VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     logging.info("start to upsert_matched_spec_table, %d matched spectra is going to be imported"%(len(upsert_data)))
     try:
@@ -212,8 +225,8 @@ def upsert_matched_spec_table(project_id, matched_spec_details, host):
         conn.close()
 
 
-def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_psm_list, host):
-    conn = get_conn(host)
+def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_psm_list):
+    conn = get_conn()
     cursor = conn.cursor()
 
     p_score_psm_table_name = "T_" + project_id.upper() + "_p_score_psm".upper()
@@ -227,7 +240,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "cluster_ratio_str TEXT, " +\
                        "cluster_size INTEGER, " + \
                        "num_spec INTEGER, " + \
-                       "spectra TEXT, " + \
+                       "spectra LONGBLOB, " + \
                        "pre_seq TEXT, " + \
                        "pre_mods TEXT," + \
                        "acceptance INTEGER" + \
@@ -246,7 +259,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "cluster_ratio_str TEXT, " +\
                        "cluster_size INTEGER, " + \
                        "num_spec INTEGER, " + \
-                       "spectra TEXT, " + \
+                       "spectra LONGBLOB, " + \
                        "pre_seq TEXT, " + \
                        "pre_mods  TEXT, " + \
                        "recomm_seq TEXT, " + \
@@ -266,7 +279,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "cluster_ratio_str TEXT, " +\
                        "cluster_size INTEGER, " + \
                        "num_spec INTEGER, " + \
-                       "spectra TEXT, " + \
+                       "spectra LONGBLOB, " + \
                        "recomm_seq TEXT, " + \
                        "recomm_mods TEXT, " + \
                        "acceptance INTEGER" + \
@@ -278,18 +291,30 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
 #    upsert_n_score_psm_sql = "replace into " + n_score_psm_table_name + " values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 #    upsert_new_psm_sql = "replace into " + new_psm_table_name + " values (?,?,?,?,?,?,?,?,?,?,?)"
 
-    upsert_p_score_psm_sql = "replace into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-    upsert_n_score_psm_sql = "replace into " + n_score_psm_table_name.upper() + " (row_id,conf_sc,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, acceptance) values(%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s)"
-    upsert_new_psm_sql = "replace into " + new_psm_table_name.upper() + " (row_id,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    upsert_p_score_psm_sql = "insert into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    upsert_n_score_psm_sql = "insert into " + n_score_psm_table_name.upper() + " (row_id,conf_sc,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, acceptance) values(%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s)"
+    upsert_new_psm_sql = "insert into " + new_psm_table_name.upper() + " (row_id,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
 
 
     try:
         """
         for i in range(0, len(p_score_psm_list)):
-            upsert_p_score_psm_sql = "replace into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, acceptance)  + \
-            values(%s,%s, '%s', %s, '%s', %s, %s, '%s', '%s', '%s', %s)"%p_score_psm_list[i]
+            upsert_p_score_psm_sql = "replace into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, acceptance) " + \
+            "values(%s,%s, '%s', %s, \"%s\", %s, %s, '%s', '%s', '%s', %s)"%p_score_psm_list[i]
+            logging.info(upsert_p_score_psm_sql)
             cursor.execute(upsert_p_score_psm_sql)
+        for i in range(0, len(n_score_psm_list)):
+            upsert_n_score_psm_sql = "replace into " + n_score_psm_table_name.upper() + " (row_id,conf_sc,recomm_seq_sc, cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods,recomm_seq, recomm_mods, acceptance) " + \
+            "values(%s, %s, %s, '%s', %s, '%s', %s, %s, '%s', '%s', '%s','%s','%s' %s)"%n_score_psm_list[i]
+            logging.info(upsert_n_score_psm_sql)
+            cursor.execute(upsert_n_score_psm_sql)
+        for i in range(0, len(new_psm_list)):
+            upsert_new_psm_sql = "replace into " + new_psm_table_name.upper() + " (row_id,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, acceptance) " + \
+            "values(%s,%s, '%s', %s, '%s', %s, %s, '%s', '%s', '%s', %s)"%new_psm_list[i]
+            logging.info(upsert_new_psm_sql)
+            cursor.execute(upsert_new_psm_sql)
+
         """
 
         cursor.executemany(upsert_p_score_psm_sql, p_score_psm_list)
@@ -309,15 +334,15 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
 """
 Get all matched cluster results from mysql db 
 """
-def get_lib_rs_from_db(search_results, host):
+def get_lib_rs_from_db(search_results):
     lib_result = dict()
-    conn = get_conn(host)
+    conn = get_conn()
     cursor = conn.cursor()
     clusters = dict()
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         cluster_id = search_result.get('lib_spec_id')
-        sql_str = "SELECT CLUSTER_RATIO, N_SPEC, N_ID_SPEC, N_UNID_SPEC, SEQUENCES_RATIOS, SEQUENCES_MODS from " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
+        sql_str = "SELECT CLUSTER_RATIO, N_SPEC, N_ID, N_UNID, SEQUENCES_RATIOS, SEQUENCES_MODS from " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
         cursor.execute(sql_str)
         rs = cursor.fetchone()
         if rs == None:
@@ -340,8 +365,8 @@ def get_lib_rs_from_db(search_results, host):
 """
 Retrive identification/psms from mysql db 
 """
-def retrieve_identification_from_db(project_id, host, output_file):
-    conn = get_conn(host)
+def retrieve_identification_from_db(project_id, output_file):
+    conn = get_conn()
     cursor = conn.cursor()
     table_name = "T_" + project_id.upper() + "_psm".upper()
     sql_str = "SELECT count(*) FROM " + table_name + "";
@@ -386,8 +411,8 @@ def get_ident_no(project_id, host):
 """
 Create paroject analysis record table
 """
-def create_project_ana_record_table(host):
-    conn = get_conn(host)
+def create_project_ana_record_table():
+    conn = get_conn()
     cursor = conn.cursor()
 
     project_ana_record_table_name = "T_project_analysis_result".upper()
@@ -414,11 +439,11 @@ def create_project_ana_record_table(host):
 """
 Upsert analysis status to table
 """
-def upsert_analysis_status(analysis_job_accession, analysis_status, host):
-    conn = get_conn(host)
+def upsert_analysis_status(analysis_job_accession, analysis_status):
+    conn = get_conn()
     cursor = conn.cursor()
     table_name =  "T_ANALYSIS_RECORD"
-    sql_str = "replace into %s (ID, STATUS) values (%d, '%s')"%(table_name, int(analysis_job_accession[1:]), analysis_status)
+    sql_str = "update  %s set STATUS =  '%s' where id = %d"%(table_name, analysis_status, int(analysis_job_accession[1:]))
     logging.info(sql_str)
     try:
         cursor.execute(sql_str)
@@ -429,8 +454,8 @@ def upsert_analysis_status(analysis_job_accession, analysis_status, host):
         cursor.close()
         conn.close()
 
-def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file, host):
-    conn = get_conn(host)
+def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file):
+    conn = get_conn()
     cursor = conn.cursor()
     psm_table_name = "T_%s_PSM"%(project_id.upper())
     create_table_sql = "CREATE TABLE IF NOT EXISTS " + psm_table_name + " (" + \
@@ -460,7 +485,7 @@ def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file, hos
                  "(spectrum_title, peptide_sequence, modifications)" + \
                  "VALUES (?,?,?)"
     """
-    if n_psms_in_db >= 0.999 * len(upsert_data ):
+    if n_psms_in_db >= 0.99 * len(upsert_data ):
         logging.info("the table already has all psms to upsert, quit importing from csv to mydql db !")
         return None
     logging.info("start to import identification to mysql db db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
@@ -469,6 +494,8 @@ def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file, hos
     import_sql = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' IGNORE 1 ROWS;"%(psm_csv_file, psm_table_name)
     try:
         cursor.execute(import_sql)
+        logging.info(import_sql)
+        print(import_sql)
     except Exception as e:
         logging.error("error in  insert_psms_to_db_from_csv, failed to import the psms(includs score and recommend sequence) in to mysql db, caused by %s"%(e))
     finally:
@@ -480,8 +507,8 @@ def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file, hos
 
     logging.info("Done import psms to mysql db from csv, %d psm have been imported"%(len(upsert_data)))
 
-def insert_spec_to_db_from_csv(project_id, spec_csv_file, host):
-    conn = get_conn(host)
+def insert_spec_to_db_from_csv(project_id, spec_csv_files):
+    conn = get_conn()
     cursor = conn.cursor()
     # spec_table_name = "T_SPECTRUM_TEST"
     spec_table_name = "T_SPECTRUM_" + project_id.upper()
@@ -495,18 +522,20 @@ def insert_spec_to_db_from_csv(project_id, spec_csv_file, host):
         "peaklist_intens LONGTEXT" + \
         ")"
     cursor.execute(create_table_sql)
+    logging.info(create_table_sql)
 
-
-    query_sql = "SELECT COUNT(*) FROM %s where SPECTRUM_TITLE like '%s%%'"%(spec_table_name, project_id.upper() )
+    query_sql = "SELECT COUNT(*) FROM %s "%(spec_table_name)
     cursor.execute(query_sql)
     n_spec_in_db = cursor.fetchone()[0]
+
+
     #todo remove this part to reduce computing time
-
-    output = os.popen("wc -l %s"%spec_csv_file).readline().replace(spec_csv_file, "")
-    n_spec_in_csv_file = int(output)
-
-    if n_spec_in_db >= 0.999 * n_spec_in_csv_file:
-        logging.info("the table already has all spec to upsert, quit importing from csv to mysql db!")
+    n_spec_in_csv_file = 0
+    for spec_csv_file in spec_csv_files:
+        output = os.popen("wc -l %s"%spec_csv_file).readline().replace(spec_csv_file, "")
+        n_spec_in_csv_file = n_spec_in_csv_file + int(output)
+    if n_spec_in_db >= 0.99 * n_spec_in_csv_file:
+        logging.info("the table already has all spec to upsert (%d), quit importing from csv(%d) to mysql db!"%(n_spec_in_db, n_spec_in_csv_file))
         return None
     logging.info("start to import spec to mysql db db")
     print("start to import spec to mysql db db")
@@ -515,42 +544,43 @@ def insert_spec_to_db_from_csv(project_id, spec_csv_file, host):
 #    output = os.popen("/usr/local/apache-phoenix-4.11.0-HBase-1.1-bin/bin/psql.py -t %s localhost %s"%(spec_table_name, spec_csv_file)).readlines()
 #    logging.info(output)
 #    print(output)
-    import_sql = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' IGNORE 1 ROWS;"%(spec_csv_file, spec_table_name)
-    try:
-        cursor.execute(import_sql)
-    except Exception as e:
-        logging.error("error in  insert_spec_to_db_from_csv, failed to import the spectra to db from csv(includs score and recommend sequence) in to mysql db, caused by %s"%(e))
-    finally:
-        cursor.close()
-        conn.close()
+
+    for spec_csv_file in spec_csv_files:
+        import_sql = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' IGNORE 1 ROWS;"%(spec_csv_file, spec_table_name)
+        try:
+            cursor.execute(import_sql)
+            logging.info(import_sql)
+            print(import_sql)
+        except Exception as e:
+            logging.error("error in  insert_spec_to_db_from_csv, failed to import the spectra to db from csv(includs score and recommend sequence) in to mysql db, caused by %s"%(e))
+
+    cursor.close()
+    conn.close()
 
     logging.info("Done import spec to mysql db from csv, %d spec have been imported"%(n_spec_in_csv_file))
 
-def insert_thresholds_to_record(cursor, project_id, thresholds):
-    conn = get_conn('localhost')
+def insert_thresholds_to_record(project_id, thresholds):
+    conn = get_conn()
     cursor = conn.cursor()
     project_ana_record_table_name = "T_project_analysis_result".upper()
-    upsert_sql = "replace into " + project_ana_record_table_name + "(" +\
-        "project_id, cluster_ratio_threshold, cluster_size_threshold, conf_sc_threshold, spectrast_fval_threshold )" +\
-        "VALUES( '%s', %f, %d, %f, %f )" % (
-        project_id,
+    upsert_sql = "update " + project_ana_record_table_name + " set " + \
+        "cluster_ratio_threshold=%f, cluster_size_threshold=%f, conf_sc_threshold=%f, spectrast_fval_threshold=%f where project_id= '%s'" % (
         thresholds.get('cluster_ratio_threshold'),
         thresholds.get('cluster_size_threshold'),
         thresholds.get('conf_sc_threshold'),
-        thresholds.get('spectrast_fval_threshold')
-        )
+        thresholds.get('spectrast_fval_threshold'),
+        project_id
+    )
     cursor.execute(upsert_sql)
     cursor.close()
     conn.close()
 
 def insert_statistics_to_record(project_id, statistics_results):
-    conn = get_conn('localhost')
+    conn = get_conn()
     cursor = conn.cursor()
     project_ana_record_table_name = "T_project_analysis_result".upper()
-    upsert_sql = "replace into " + project_ana_record_table_name + "(" +\
-        "project_id, prePSM_no, prePSM_not_matched_no, prePSM_high_conf_no, prePSM_low_conf_no, better_PSM_no, new_PSM_no, matched_spec_no, matched_id_spec_no )" +\
-        "VALUES('%s', %d, %d, %d, %d, %d, %d, %d, %d)" % (
-        project_id,
+    upsert_sql = "update " + project_ana_record_table_name + " set " +\
+        "prePSM_no=%d, prePSM_not_matched_no=%d, prePSM_high_conf_no=%d, prePSM_low_conf_no=%d, better_PSM_no=%d, new_PSM_no=%d, matched_spec_no=%d, matched_id_spec_no=%d where project_id='%s'"%(
         statistics_results['prePSM_no'],
         statistics_results['prePSM_not_matched_no'],
         statistics_results['prePSM_high_conf_no'],
@@ -558,7 +588,8 @@ def insert_statistics_to_record(project_id, statistics_results):
         statistics_results['better_PSM_no'],
         statistics_results['new_PSM_no'],
         statistics_results['matched_spec_no'],
-        statistics_results['matched_id_spec_no']
+        statistics_results['matched_id_spec_no'],
+        project_id
         )
     cursor.execute(upsert_sql)
     logging.info("Done with sql: %s"%(upsert_sql))
@@ -571,7 +602,7 @@ def test_cluster_select():
     host = "localhost"
     cluster_table = "V_CLUSTER"
     cluster_id = "14b08180-051a-4dd7-8087-6095db2704b2"
-    conn = get_conn(host)
+    conn = get_conn()
     cursor = conn.cursor()
     cluster_query_sql = "SELECT CLUSTER_RATIO, N_SPEC FROM " + cluster_table + " WHERE CLUSTER_ID = '" + cluster_id + "'"
     # print(cluster_query_sql)
