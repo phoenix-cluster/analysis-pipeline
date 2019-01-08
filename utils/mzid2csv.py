@@ -56,10 +56,10 @@ def mzid2csv(projectid, filename, peak_file, outfile, score_field, title_field, 
                                           include_decoy=include_decoy)
     with open(outfile, "w") as csv_file:
         writer = csv.writer(csv_file)
-        writer.writerow(["Title", "Sequence", "Modification"])
+        writer.writerow(["Title", "Sequence", "Modification", "Charge", "PrecursorMz"])
         for psm in psms:
-            spec_title = "%s;%s;index=%d"%(projectid, os.path.basename(peak_file), psm["index"])
-            writer.writerow([spec_title, psm['sequence'], psm.get("ptms", '')])
+            spec_title = "%s;%s;spectrum=%d"%(projectid, os.path.basename(peak_file), psm["index"])
+            writer.writerow([spec_title, psm['sequence'], psm.get("ptms", ''), psm.get("charge"), psm.get("prec_mz")])
 
 
 def main():
@@ -74,7 +74,7 @@ def main():
         out_path = arguments.get('-o', '.')
     if not score_field or not peak_file:
         (score_field, peak_file) = mzident_reader.get_scfield_peakfile(mzid_file)
-    outfile = os.path.join(out_path, os.path.splitext(mzid_file)[0]+".csv")
+    outfile = os.path.join(out_path, os.path.splitext(mzid_file)[0]+"_psm.csv")
 
     if not os.path.exists(peak_file):
         raise Exception("source peak file %s does not exist for mzid file %s"%(peak_file, mzid_file))

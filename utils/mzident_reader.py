@@ -357,6 +357,9 @@ def parser_mzident2(filename, score_field, title_field=None,
             else:
                 mzid_psm["index"] = Psm.MISSING_INDEX
 
+            mzid_psm['charge'] = spec_ident_attribs.get('chargeState', 'NA') #for missing charge in peak file
+            mzid_psm['prec_mz'] = spec_ident_attribs.get('experimentalMassToCharge', 'NA')# for double check is correct spec
+
             # spectrum title is optional in mzIdentML
             if title_field is not None:
                 mzid_psm["title"] = spec_ref_attribs.get(title_field).strip()

@@ -193,6 +193,7 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
     exe_path = os.path.abspath(os.path.dirname(__file__))
     mgf_converter= os.path.join(exe_path,"utils/mgf2csv.py")
     mzid_converter= os.path.join(exe_path, "utils/mzid2csv.py")
+    mzml_converter= os.path.join(exe_path, "utils/mzml2csv.py")
     #todo will be added in the future   mztab_converter= config.get("PipeLine", "mztab_converter")
 
     pride_xml_command_str = "java -jar %s " + \
@@ -201,6 +202,7 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
     mzid_command_str = "python3 %s -p %s -i %s %s %s"
     mgf_peak_psm_command_str = "python3 %s -p %s -i %s --type peak_psm %s"
     mgf_peak_command_str = "python3 %s -p %s -i %s --type peak %s"
+    mzml_peak_command_str = "python3 %s -p %s -i %s %s"
 
     with open(shell_file,"w") as f:
         f.write(cd_shell_path)
@@ -221,18 +223,16 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
             if os.path.exists(project_id + os.sep + ms_run['name'] + ".mgf"):
                 peakfile = ms_run['name'] + ".mgf"
                 peakfile_option = "--peakfile %s"%peakfile
-            #todo add mzML support in the future
-            # if os.path.exists(ms_run['name'] + ".mzML"):
-            #     peakfile = ms_run['name'] + ".mzML"
-            #     peakfile_option = "--peakfile %s"%peakfile
-            #
+
+            elif os.path.exists(ms_run['name'] + ".mzML"):
+                peakfile = ms_run['name'] + ".mzML"
+                peakfile_option = "--peakfile %s"%peakfile
+
 
             #if no same name peak file found, retrive peak file name from mzid file
             if peakfile_option == "":
                 if(os.path.exists(project_id + os.sep + filename)):
-                    print("found mzid")
                     (score_field, peakfile) = mzident_reader.get_scfield_peakfile(project_id + os.sep + filename)
-                    print("found peakfile %s"%peakfile)
                     if os.path.exists(project_id + os.sep + peakfile):
                         peakfile_option = "--peakfile %s"%peakfile
                         print(peakfile)
@@ -249,7 +249,10 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
                     f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, ';'))
                 if psmfiletype == "mzid":
                     f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, ';'))
-                    f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
+                    if peakfile.endswith(".mgf"):
+                        f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
+                    elif peakfile.endswith((".mzML")):
+                        f.write(mzml_peak_command_str %(mzml_converter, project_id, peakfile, ';'))
             else:
                 if psmfiletype == "pridexml":
                     f.write(pride_xml_command_str % (pride_xml_converter, project_id, filename, '&'))
@@ -257,7 +260,10 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
                     f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, '&'))
                 if psmfiletype == "mzid":
                     f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, '&'))
-#todo uncomment this                    f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
+                    if peakfile.endswith(".mgf"):
+                        f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, '&'))
+                    elif peakfile.endswith((".mzML")):
+                        f.write(mzml_peak_command_str %(mzml_converter, project_id, peakfile, '&'))
 
         print("done with creating load_psms_peaks_to_csv.sh")
 

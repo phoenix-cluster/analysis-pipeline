@@ -1,6 +1,6 @@
 """
 Usage:
-    mgf2csv.py [-vrh -t <data_type>] (-i <mgf_file>) [--projectid <projectid>]
+    mgf2csv.py [-vrh -t <data_type>] (-i <mgf_file> --projectid <projectid>)
 
 Arguments:
     mgf_file            Required input mgf file
@@ -23,9 +23,16 @@ Example
 import csv
 from pyteomics import mgf
 from docopt import docopt
+import os
 
 
-def get_info(spectrum, data_type):
+def get_spec_info(spectrum, data_type):
+    """
+    get spectrum data
+    :param spectrum:
+    :param data_type: peak vs peak_psm
+    :return:
+    """
     params = spectrum.get('params')
     title = params.get('title')
     spectrumTitle = title
@@ -56,27 +63,37 @@ def get_info(spectrum, data_type):
 
     return spectrumTitle,precursorMz,precursorIntens,charge, seq, mods, cleanPeaklistMz,cleanPeaklistIntens
 
-def get_row(spectrum, data_type):
-    spectrumTitle, precursorMz, precursorIntens, charge, seq, mods, peaklistMz, peaklistIntens = get_info(spectrum, data_type)
+def get_row(projectid, filename, index, spectrum, data_type):
+    """
+    get row data for a spectrum
+    :param spectrum:
+    :param data_type: peak vs peak_psm
+    :return:
+    """
+    spectrumTitle, precursorMz, precursorIntens, charge, seq, mods, peaklistMz, peaklistIntens = get_spec_info(spectrum, data_type)
+    spectrumTitle = "%s;%s;index=%d"%(projectid, filename, index) #biuld new title with the projectid;filename;index
     peaklistMz = ",".join('%s' %id for id in peaklistMz)
     peaklistIntens = ",".join('%s' %id for id in peaklistIntens)
-    spec_list = []
-    psm_list = []
-    spec_list.append(spectrumTitle)
-    spec_list.append(precursorMz)
-    spec_list.append(precursorIntens)
-    spec_list.append(charge)
-    spec_list.append(peaklistMz)
-    spec_list.append(peaklistIntens)
+    spec_row = []
+    psm_row = []
+    spec_row.append(spectrumTitle)
+    spec_row.append(precursorMz)
+    spec_row.append(precursorIntens)
+    spec_row.append(charge)
+    spec_row.append(peaklistMz)
+    spec_row.append(peaklistIntens)
 
     if data_type == "peak_psm" and None != seq:
-        psm_list.append(spectrumTitle)
-        psm_list.append(seq)
-        psm_list.append(mods)
+        psm_row.append(spectrumTitle)
+        psm_row.append(seq)
+        psm_row.append(mods)
 
-    return spec_list, psm_list 
+    return spec_row, psm_row
 
-def write_to_csv (mgf_file, data_type):
+def write_to_csv (projectid, mgf_file, data_type):
+
+    filename = os.path.basename(mgf_file)
+
     spec_file_name = mgf_file[:-4] + "_spec.csv"
     spec_file = open(spec_file_name,"w")
     spec_writer = csv.writer(spec_file)
@@ -91,11 +108,11 @@ def write_to_csv (mgf_file, data_type):
     spectra_list = mgf.read(mgf_file)
 
     print("Handling the data in %s"%(mgf_file))
-    for spectrum in spectra_list:
-        (spec_list,psm_list) = get_row(spectrum, data_type)
-        spec_writer.writerow(spec_list)
+    for index, spectrum in enumerate(spectra_list, start=1):  # default is zero
+        (spec_row,psm_row) = get_row(projectid, filename, index, spectrum, data_type)
+        spec_writer.writerow(spec_row)
         if data_type == "peak_psm":
-            psm_writer.writerow(psm_list)
+            psm_writer.writerow(psm_row)
     print("The data had been wrote in the csv file.")
 
 if __name__ == '__main__':
@@ -103,4 +120,7 @@ if __name__ == '__main__':
     arguments = docopt(__doc__, version='mgf2csv 0.1')
     mgf_file = arguments['--inputfile']
     data_type = arguments.get('--type', 'peak')
-    write_to_csv(mgf_file, data_type)
+    projectid = arguments.get('--projectid', None) or arguments.get("-p", None)
+    if not projectid:
+        raise Exception("Error, no project id input.")
+    write_to_csv(projectid,mgf_file, data_type)
