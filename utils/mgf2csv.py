@@ -1,6 +1,6 @@
 """
 Usage:
-    mgf2csv.py [-vrh -t <data_type>] (-i <mgf_file>)
+    mgf2csv.py [-vrh -t <data_type>] (-i <mgf_file>) [--projectid <projectid>]
 
 Arguments:
     mgf_file            Required input mgf file
@@ -12,6 +12,7 @@ Options:
     -q, --quite Sel                                     quite mode
     -r                                                  make report
     -i <mgf_file>,--inputfile <mgf_file>                input mgf file
+    -p,--projectid <project_id>,                        project id
     -t <data_type>,--type <file_type>                   input mgf file type, default is peak
 
 Example

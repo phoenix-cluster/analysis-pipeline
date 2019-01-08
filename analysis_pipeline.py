@@ -28,9 +28,10 @@ sys.path.append(file_dir)
 #import phoenix_storage_access as phoenix
 import mysql_storage_access as mysql_acc
 from subprocess import Popen,PIPE,STDOUT
+import  utils.mzident_reader as mzident_reader
 
 #max number of parallel jobs
-parallel_jobs = 20
+parallel_jobs = 1
 
 #resultFile name with running status
 result_file_name = "resultFiles.txt.started"
@@ -44,8 +45,10 @@ def get_result_files(project_id):
     result_files = list()
     try:
         with open (result_file_path, 'r') as f:
-            for filename in f.readlines():
-                result_files.append(filename.strip())
+            for line in f.readlines():
+                line = line.strip()
+                items = line.split()
+                result_files.append({"filename":items[0], "filetype":items[1]})
     except IOError:
         if project_id.startswith("E"):
             logging.info('resultFiles.txt does not exist for Enhancer Project %s! \nAbort pipeline.'%(project_id))
@@ -63,7 +66,11 @@ def get_result_files(project_id):
 
                 for file in files:
                     if file["fileType"] == "RESULT":
-                        result_files.append(file["fileName"])
+                        if file["fileName"].endswith(".mzid") or file["fileName"].endswith(".mzid.gz") or \
+                           file["fileName"].endswith(".mztab") or file["fileName"].endswith(".mztab.gz"):
+                            result_files.append("%s\t%s"%(file["fileName"], "psm")) #mzid or mztab as psm
+                        if file["fileName"].endswith(".xml") or file["fileName"].endswith(".xml.gz") :
+                            result_files.append("%s\t%s"%(file["fileName"], "peaknpsm")) #pride xml as peaknpsm
 
                 with open (result_file_path, 'w') as f:
                     for result_file in result_files:
@@ -75,16 +82,48 @@ def get_result_files(project_id):
 
     return result_files
 
-def get_ms_run_names(result_files):
-    ms_run_names = []
+def get_ms_runs(result_files):
+    """
+    here we only get the file has psm
+    :param result_files:
+    :return:
+    """
+    ms_runs = list()
     for file in result_files:
-        if file.lower().endswith(".xml.gz"):
-            ms_run_names.append(file[:-7])
-        elif file.lower().endswith(".xml"):
-            ms_run_names.append(file[:-4])
+        filetype = file.get("filetype")
+        if filetype=="peak":  #don't consider the peak files as ms_run files
+            continue
+        filename = file.get("filename")
+        ms_run_name = ""
+        psmfiletype= ""
+        if filename.lower().endswith(".xml.gz") :
+            ms_run_name = filename[:-7]
+            psmfiletype= "pridexml"
+        elif filename.lower().endswith(".mgf.gz"):
+            ms_run_name = filename[:-7]
+            psmfiletype= "mgf"
+        elif filename.lower().endswith(".mzid.gz"):
+            ms_run_name = filename[:-8]
+            psmfiletype= "mzid"
+        elif filename.lower().endswith(".mztab.gz"):
+            ms_run_name = filename[:-9]
+            psmfiletype= "mztab"
+        elif filename.lower().endswith(".xml") :
+            ms_run_name = filename[:-4]
+            psmfiletype= "pridexml"
+        elif filename.lower().endswith(".mgf"):
+            ms_run_name = filename[:-4]
+            psmfiletype= "mgf"
+        elif filename.lower().endswith(".mzid"):
+            ms_run_name = filename[:-5]
+            psmfiletype= "mzid"
+        elif filename.lower().endswith(".mztab"):
+            ms_run_name = filename[:-6]
+            psmfiletype= "mztab"
         else:
-            raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz" % (file))
-    return (ms_run_names)
+            raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz or .mzid/.mztab or .mzid.gz/.mztab.gz" % (file))
+        ms_runs.append({"name":ms_run_name, "psmfiletype":psmfiletype, "filename":filename})
+    return (ms_runs)
 
 def create_unzip_shell_files(project_id, result_files):
     if len(result_files) < 1:
@@ -95,29 +134,37 @@ def create_unzip_shell_files(project_id, result_files):
     with open(unzip_file,"w") as f:
         f.write(cd_shell_path)
         for file in result_files:
-            file_path = project_id  + "/" + file
-            if os.path.isfile(file_path) and file.endswith(".gz"):
+            filename = file.get('filename')
+            file_path = project_id  + "/" + filename
+            if os.path.isfile(file_path) and filename.endswith(".gz"):
                 temp_index -= 1
                 if temp_index == 0:
                     temp_index = parallel_jobs
-                    f.write("gzip -d \"" + file + "\" ;\n")
+                    f.write("gzip -d \"" + filename + "\" ;\n")
                 else:
-                    f.write("gzip -d \"" + file + "\" &\n")
+                    f.write("gzip -d \"" + filename + "\" &\n")
 
-            elif os.path.isfile(project_id  + "/" + file[:-3]):
+            elif os.path.isfile(project_id  + "/" + filename[:-3]):
                 continue #this file has been unzipped
-            elif os.path.isfile(project_id  + "/" + file)and file.endswith(".xml"):
-                continue #the uploaded file is unzipped
+            elif os.path.isfile(project_id  + "/" + filename):
+                if (filename.lower().endswith(".xml") or
+                    filename.lower().endswith(".mzid") or
+                    filename.lower().endswith(".mgf") or
+                    filename.lower().endswith(".mztab") or
+                    filename.lower().endswith(".mzml") or
+                    filename.lower().endswith(".mgf")
+                ):
+                    continue #the uploaded file is unzipped
             else:
-                print("----\n" + file + " is wrong in unzip step\n----\n")
+                print("----\n" + filename + " is wrong in unzip step\n----\n")
                 sys.exit()
                 # raise Exception("result file %s is missing" % (file))
 
         print("done with creating unzip.sh")
 
-def create_merge_shell_files(project_id, ms_run_names, type):
-    if len(ms_run_names) < 1:
-        logging.error("ms_run_names is empty")
+def create_merge_shell_files(project_id, ms_runs, type):
+    if len(ms_runs) < 1:
+        logging.error("ms_runs is empty")
         return
 
     import_file = project_id + "/merge_%s_csv.sh"%type
@@ -135,45 +182,94 @@ def create_merge_shell_files(project_id, ms_run_names, type):
     print("done with creating merge.sh")
     logging.info("done with creating merge.sh")
 
-def create_convert_pridexml_to_csv_shell_files(project_id, ms_run_names):
-    if len(ms_run_names) < 1:
+def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
+    if len(ms_runs) < 1:
         return
 
-    shell_file = project_id + "/convert_pridexml_to_csv.sh"
+    shell_file = project_id + "/load_psms_peaks_to_csv.sh"
 
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
-    converter= config.get("PipeLine", "pride_xml_converter")
+    pride_xml_converter= config.get("PipeLine", "pride_xml_converter")
+    exe_path = os.path.abspath(os.path.dirname(__file__))
+    mgf_converter= os.path.join(exe_path,"utils/mgf2csv.py")
+    mzid_converter= os.path.join(exe_path, "utils/mzid2csv.py")
+    #todo will be added in the future   mztab_converter= config.get("PipeLine", "mztab_converter")
 
-    command_str = "java -jar %s " + \
+    pride_xml_command_str = "java -jar %s " + \
                    " -m -csv -p %s -i \"%s\" %s\n" #no importing to db here
 #                   " -m -csv -ph -p %s -i \"%s\" %s\n"
+    mzid_command_str = "python3 %s -p %s -i %s %s %s"
+    mgf_peak_psm_command_str = "python3 %s -p %s -i %s --type peak_psm %s"
+    mgf_peak_command_str = "python3 %s -p %s -i %s --type peak %s"
 
     with open(shell_file,"w") as f:
         f.write(cd_shell_path)
-        f.write("rm %s_psm.csv \n" % (project_id))
-        f.write("rm %s_spec.csv \n" % (project_id))
         temp_n_parallel_jobs = int(parallel_jobs/2)
         temp_index = temp_n_parallel_jobs
-        for ms_run_name in ms_run_names:
-            file_name = ("%s.xml" % (ms_run_name))
+        for ms_run in ms_runs:
+            print("msrun %s" % ms_run.get("name"))
+            f.write("rm %s_psm.csv \n" % (ms_run.get("name")))
+            f.write("rm %s_spec.csv \n" % (ms_run.get("name")))
+            psmfiletype =ms_run.get("psmfiletype")
+
+            if psmfiletype == "mztab":
+                raise Exception("mztab is not supported right now, please wait for our upgrade")
+            filename = ms_run['filename']
+            peakfile = ""
+            peakfile_option = ""
+
+            if os.path.exists(project_id + os.sep + ms_run['name'] + ".mgf"):
+                peakfile = ms_run['name'] + ".mgf"
+                peakfile_option = "--peakfile %s"%peakfile
+            #todo add mzML support in the future
+            # if os.path.exists(ms_run['name'] + ".mzML"):
+            #     peakfile = ms_run['name'] + ".mzML"
+            #     peakfile_option = "--peakfile %s"%peakfile
+            #
+
+            #if no same name peak file found, retrive peak file name from mzid file
+            if peakfile_option == "":
+                if(os.path.exists(project_id + os.sep + filename)):
+                    print("found mzid")
+                    (score_field, peakfile) = mzident_reader.get_scfield_peakfile(project_id + os.sep + filename)
+                    print("found peakfile %s"%peakfile)
+                    if os.path.exists(project_id + os.sep + peakfile):
+                        peakfile_option = "--peakfile %s"%peakfile
+                        print(peakfile)
+
+            if peakfile_option == "": #still no peak file found
+                raise Exception("No peak file exists for ms_run %s, we looked for file name %s.mgf/mzML or the \
+                                    source file name in psm file"%(filename, ms_run['name']))
             temp_index -= 1
             if temp_index == 0:
                 temp_index = temp_n_parallel_jobs
-                f.write(command_str % (converter, project_id, file_name, ';'))
+                if psmfiletype == "pridexml":
+                    f.write(pride_xml_command_str % (pride_xml_converter, project_id, filename, ';'))
+                if psmfiletype == "mgf":
+                    f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, ';'))
+                if psmfiletype == "mzid":
+                    f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, ';'))
+                    f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
             else:
-                f.write(command_str % (converter, project_id, file_name, '&'))
+                if psmfiletype == "pridexml":
+                    f.write(pride_xml_command_str % (pride_xml_converter, project_id, filename, '&'))
+                if psmfiletype == "mgf":
+                    f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, '&'))
+                if psmfiletype == "mzid":
+                    f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, '&'))
+#todo uncomment this                    f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
 
-        print("done with creating import_to_db.sh")
+        print("done with creating load_psms_peaks_to_csv.sh")
 
-def create_convert_shell_files(project_id, ms_run_names):
-    if len(ms_run_names) < 1:
+def create_convert_shell_files(project_id, ms_runs):
+    if len(ms_runs) < 1:
         return
     convert_file = project_id + "/msconvert.sh"
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
     with open(convert_file,"w") as f:
         f.write(cd_shell_path)
         temp_index = parallel_jobs
-        for ms_run_name in ms_run_names:
+        for ms_run_name in ms_runs:
             file_name = ("%s.mgf" % (ms_run_name))
             temp_index -= 1
             if temp_index == 0:
@@ -183,8 +279,8 @@ def create_convert_shell_files(project_id, ms_run_names):
                 f.write("%s \"%s\" --mzML -o %s &\n" % (config.get("PipeLine","msconvert"),file_name, "./"))
         print("Done with creating msconvert.sh")
 
-def create_spectrast_shell_files(project_id, ms_run_names):
-    if len(ms_run_names) < 1:
+def create_spectrast_shell_files(project_id, ms_runs):
+    if len(ms_runs) < 1:
         return
     spectrast_search_file = project_id + "/spectrast_search.sh"
     cd_shell_path = "cd $(dirname $([ -L $0 ] && readlink -f $0 || echo $0))\n"
@@ -193,7 +289,7 @@ def create_spectrast_shell_files(project_id, ms_run_names):
         temp_index = parallel_jobs
         spectrast = config.get("PipeLine","spectrast")
         speclib_file = config.get("PipeLine","speclib_file")
-        for ms_run_name in ms_run_names:
+        for ms_run_name in ms_runs:
             file_name = "%s.mzML" % (ms_run_name)
             temp_index -= 1
             if temp_index == 0:
@@ -214,22 +310,23 @@ def main():
     if arguments.get('--silent_op', False) or arguments.get('-t', False):
         is_silent = True
         silent_op = arguments['--silent_op'] or arguments['-t']
-    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to analysis (pipeline) project: " + project_id)
 
     result_files = get_result_files(project_id)
     logging.info("Get %d files from resultFiles.txt for project %s: " %(len(result_files), project_id))
     logging.info(result_files)
 
-    ms_run_names = get_ms_run_names(result_files)
-    logging.info("Get %d msrun from resultFiles.txt for project %s: " %(len(ms_run_names), project_id))
-    logging.info(ms_run_names)
+    ms_runs = get_ms_runs(result_files)
+    logging.info("Get %d msrun from resultFiles.txt for project %s: " %(len(ms_runs), project_id))
+    logging.info(ms_runs)
 
     print(project_id)
     if not project_id.startswith("P"):
         # phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
         mysql_acc.upsert_analysis_status(project_id, 'started')
 
+    #unzip the gz files
     unzip_file = project_id + "/unzip.sh"
     redo = ''
     if is_silent:
@@ -248,38 +345,24 @@ def main():
         logging.info(''.join(output) + "\n")
         logging.info("unziping take time %d seconds"%(end - start))
 
-
-    convert_to_csv_shell = project_id + "/convert_pridexml_to_csv.sh"
+    #retrieve psms and peaks to csv file
+    load_psms_peaks_to_csv_shell = project_id + "/load_psm_peaks_to_csv.sh"
     redo = ''
     if is_silent:
         redo = silent_op
-    if os.path.isfile(convert_to_csv_shell):
+    if os.path.isfile(load_psms_peaks_to_csv_shell):
         while redo != 'y' and redo != 'n':
-            redo = input('the convert_pridexml_to_csv.sh is already there, do you really want to redo the convert to csv process? y/n')
+            redo = input('the load_psms_peaks_to_csv.sh is already there, do you really want to redo the load to csv process? y/n')
     if redo == 'y' or redo == '':
-        create_convert_pridexml_to_csv_shell_files(project_id, ms_run_names)
+        create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs)
         start = time.time()
         print("==--Starting convert spectra & psm files --==:\n")
         logging.info("==--Starting convert spectra & psm files --==:\n")
-        output1 = os.popen('sh '+ project_id + "/convert_pridexml_to_csv.sh").readlines()
+        output1 = os.popen('sh '+ project_id + "/load_psms_peaks_to_csv.sh").readlines()
         end = time.time()
         logging.info("convert to spectra/psm csv take time %d seconds"%(end - start))
-        """
-        create_merge_shell_files(project_id, ms_run_names, 'psm')
-        create_merge_shell_files(project_id, ms_run_names, 'spec')
-        print("==--Starting merge psm--==:\n" )
-        logging.info("==--Starting merge psm--==:\n")
-        output2 = os.popen('sh '+ project_id + "/merge_psm_csv.sh").readlines()
-        print(''.join(output2) + "\n")
-        logging.info(''.join(output2) + "\n")
-
-        print("==--Starting merge spec--==:\n")
-        logging.info("==--Starting merge spec--==:\n")
-        output3 = os.popen('sh '+ project_id + "/merge_spec_csv.sh").readlines()
-        print( ''.join(output3) + "\n")
-        logging.info(''.join(output3) + "\n")
-        """
-
+    return 0
+    #convert the peak files to mzml
     convert_to_mzml_file = project_id + "/msconvert.sh"
     redo = ''
     if is_silent:
@@ -288,7 +371,7 @@ def main():
         while redo != 'y' and redo != 'n':
             redo = input('the msconvert.sh is already there, do you really want to redo the msconvert process? y/n')
     if redo == 'y' or redo == '':
-        create_convert_shell_files(project_id, ms_run_names)
+        create_convert_shell_files(project_id, ms_runs)
         start = time.time()
         logging.info("==--Starting msconvert--==:\n" )
         output = os.popen('sh '+ project_id + "/msconvert.sh").readlines()
@@ -306,7 +389,7 @@ def main():
         while redo != 'y' and redo != 'n':
             redo = input('the spectrast_search.sh is already there, do you really want to redo the spectrast search process? y/n')
     if redo == 'y' or redo == '':
-        create_spectrast_shell_files(project_id, ms_run_names)
+        create_spectrast_shell_files(project_id, ms_runs)
         start = time.time()
         print("==--Starting start spectrast search--==:\n")
         logging.info("==--Starting spectrast search--==:\n")

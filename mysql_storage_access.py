@@ -454,7 +454,7 @@ def upsert_analysis_status(analysis_job_accession, analysis_status):
         cursor.close()
         conn.close()
 
-def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file):
+def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_files):
     conn = get_conn()
     cursor = conn.cursor()
     psm_table_name = "T_%s_PSM"%(project_id.upper())
@@ -491,11 +491,12 @@ def insert_psms_to_db_from_csv(project_id, identified_spectra, psm_csv_file):
     logging.info("start to import identification to mysql db db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
     print("start to import identification to mysql db db, n_psms_in_db %s < len(upsert_data) %s"%(n_psms_in_db, len(upsert_data)))
 #    cursor.executemany(upsert_sql, upsert_data)
-    import_sql = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' IGNORE 1 ROWS;"%(psm_csv_file, psm_table_name)
     try:
-        cursor.execute(import_sql)
-        logging.info(import_sql)
-        print(import_sql)
+        for psm_csv_file in psm_csv_files:
+            import_sql = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s FIELDS TERMINATED BY ',' ENCLOSED BY '\"' IGNORE 1 ROWS;"%(psm_csv_file, psm_table_name)
+            cursor.execute(import_sql)
+            logging.info(import_sql)
+            print(import_sql)
     except Exception as e:
         logging.error("error in  insert_psms_to_db_from_csv, failed to import the psms(includs score and recommend sequence) in to mysql db, caused by %s"%(e))
     finally:

@@ -171,21 +171,21 @@ def read_matched_spec_from_csv(csv_file):
     logging.info("Done read_matched_spec_from_csv, %s matched spectra have been readed from csv file"%len(new_dict))
     return new_dict
 
-def read_identification_from_csv(csv_file):
-    if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
-        print("no csv found: %s"%(csv_file))
-        logging.info("no csv found: %s"%(csv_file))
-        return None
-    print("start to read identification from csv")
-    logging.info("start to read identification from csv")
-    with open(csv_file, 'r') as f:
-        new_dict = {}
-        fieldnames = ['spectrumTitle', 'peptideSequence', 'modifications']
+def read_identification_from_csv(csv_files):
+    new_dict = {}
+    for csv_file in csv_files:
+        if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
+            print("no csv found: %s"%(csv_file))
+            logging.info("no csv found: %s"%(csv_file))
+            return None
+        print("start to read identification from csv")
+        logging.info("start to read identification from csv")
+        with open(csv_file, 'r') as f:
+            fieldnames = ['spectrumTitle', 'peptideSequence', 'modifications']
 
-        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',', skipinitialspace=True)
-        for row in reader:
-            spec_title = row.pop('spectrumTitle')
-
-            new_dict[spec_title] = row
-    logging.info("%d identifed peptide has been read"%len(new_dict))
+            reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',', skipinitialspace=True)
+            for row in reader:
+                spec_title = row.pop('spectrumTitle')
+                new_dict[spec_title] = row
+        logging.info("%d identifed peptide has been read"%len(new_dict))
     return new_dict

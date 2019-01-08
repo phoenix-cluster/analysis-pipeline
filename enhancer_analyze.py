@@ -51,7 +51,7 @@ def main():
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
 
-    logging.basicConfig(filename="%s.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to calculate project: " + project_id)
 
     # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
@@ -74,16 +74,17 @@ def main():
 
     # export search result to mysql_acc_db by building the whole big table
     start = time.clock()
-    psm_file = project_id + "/" + project_id + "_psm.csv"
+    # psm_file = project_id + "/" + project_id + "_psm.csv"
 #    spec_file = project_id + "/" + project_id + "_spec.csv"
     spec_files = glob.glob(project_id + "/*_spec.csv")
+    psm_files = glob.glob(project_id + "/*_psm.csv")
     logging.info("start to read identification from csv")
     print("start to read identification from csv")
-    identified_spectra  = psm_util.read_identification_from_csv(psm_file)
+    identified_spectra  = psm_util.read_identification_from_csv(psm_files)
     if identified_spectra == None:
         identified_spectra = mysql_acc.retrieve_identification_from_db(project_id, None)
     else:
-        mysql_acc.insert_psms_to_db_from_csv(project_id, identified_spectra, psm_file)
+        mysql_acc.insert_psms_to_db_from_csv(project_id, identified_spectra, psm_files)
 
     mysql_acc.insert_spec_to_db_from_csv(project_id, spec_files) #specs also needs to be import because java pride xml importer don't import to phoenix any more
 
