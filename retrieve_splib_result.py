@@ -18,7 +18,6 @@ def get_conn():
     conn = mysql_acc.get_conn()
     return conn
 
-
 def get_lib_spec_id(protein_str):
     words = protein_str.split("_") 
     return words[1]

@@ -10,7 +10,7 @@ if choise=='y' or choise=="yes":
     a=test1.De_GunzipShell()
     a1=test1.De_GzipShell()
 else:
-    path=str(input("Please enter the absolute path of the folder you need to extract/compress: Such as\n/home/luoxiyang/test/\n"))
+    path=str(input("Please enter the absolute path of the folder you need to extract/compress: Such as\n/home/luoxiyang/test_old/\n"))
     b=test1.GunzipShell(path)
     b1=test1.GzipShell(path)
     

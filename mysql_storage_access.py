@@ -598,6 +598,100 @@ def insert_statistics_to_record(project_id, statistics_results):
     cursor.close()
     conn.close()
 
+def get_analysis_job(analysis_id):
+    conn = get_conn()
+    cursor = conn.cursor()
+    project_ana_record_table_name = "T_analysis_record".upper()
+    select_str = "SELECT * FROM  %s  WHERE ID = %d"%(project_ana_record_table_name ,analysis_id)
+    try:
+        cursor.execute(select_str)
+        result = cursor.fetchone()
+        logging.debug("Done with sql: %s"%(select_str))
+        conn.commit()
+        return {
+            "id":result[0],
+            "file_path":result[1],
+            "upload_date":result[2],
+            "user_id":result[3],
+            "status":result[4],
+            "token":result[5],
+            "ispublic":result[6],
+            "email_add":result[7],
+            "is_email_sent":result[8],
+            "accession":result[9],
+        }
+    except Exception as e:
+        logging.error("error in, failed to execute %s , caused by %s"%(select_str, e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_status_and_file_path(analysis_id):
+    conn = get_conn()
+    cursor = conn.cursor()
+    project_ana_record_table_name = "T_analysis_record".upper()
+    select_str = "SELECT STATUS, FILE_PATH FROM  %s  WHERE ID = %d"%(project_ana_record_table_name ,analysis_id)
+    try:
+        cursor.execute(select_str)
+        result = cursor.fetchone()
+        logging.debug("Done with sql: %s"%(select_str))
+        conn.commit()
+        if not result[0] or result[0] == 'null':
+            raise  Exception("analysis job E%06d has null file path"%(analysis_id))
+        return result[0],result[1]
+    except Exception as e:
+        logging.error("error in, failed to execute %s , caused by %s"%(select_str, e))
+    finally:
+        cursor.close()
+        conn.close()
+
+def update_analysis_email_public(analysis_id, user_email_add, is_public):
+    conn = get_conn()
+    cursor = conn.cursor()
+    project_ana_record_table_name = "T_analysis_record".upper()
+    upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
+                     "EMAIL_ADD='%s', ISPUBLIC='%s' WHERE id ='%d'"%(user_email_add, is_public,analysis_id)
+    try:
+        cursor.execute(upsert_sql)
+        conn.commit()
+    except Exception as e:
+        logging.error("error in, failed to execute %s , caused by %s"%(upsert_sql, e))
+    finally:
+        conn.close()
+        cursor.close()
+
+def update_analysis_job(analysis_id, file_path, date, user_id, accession_id):
+    conn = get_conn()
+    cursor = conn.cursor()
+    project_ana_record_table_name = "T_analysis_record".upper()
+    upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
+                     "FILE_PATH='%s', UPLOAD_DATE='%s', USER_ID=%d, ACCESSION='%s' \
+                     WHERE id ='%d'"%\
+                 (file_path, date, user_id, accession_id, analysis_id)
+    try:
+        cursor.execute(upsert_sql)
+        conn.commit()
+    except Exception as e:
+        logging.error("error in, failed to execute %s , caused by %s"%(upsert_sql, e))
+    finally:
+        conn.close()
+        cursor.close()
+
+def update_analysis_job_status(analysis_id, status):
+    conn = get_conn()
+    cursor = conn.cursor()
+    project_ana_record_table_name = "T_analysis_record".upper()
+    upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
+                     "STATUS='%s' WHERE id ='%d'"%(status, analysis_id)
+    try:
+        cursor.execute(upsert_sql)
+        conn.commit()
+    except Exception as e:
+        logging.error("error in, failed to execute %s , caused by %s"%(upsert_sql, e))
+    finally:
+        conn.close()
+        cursor.close()
 
 def test_cluster_select():
     host = "localhost"

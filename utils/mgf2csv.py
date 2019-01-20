@@ -16,8 +16,8 @@ Options:
     -t <data_type>,--type <file_type>                   input mgf file type, default is peak
 
 Example
-    mgf2csv.py -i test.mgf
-    mgf2csv.py -i test.mgf -t peak
+    mgf2csv.py -i test_old.mgf
+    mgf2csv.py -i test_old.mgf -t peak
 """
 
 import csv

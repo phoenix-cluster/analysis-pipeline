@@ -18,7 +18,7 @@ def abort_if_todo_doesnt_exist(todo_id):
 # File upload
 #
 class FileUpload(Resource):
-    UPLOAD_FOLDER = '/data/phoenix_enhancer/test'
+    UPLOAD_FOLDER = '/data/phoenix_enhancer/test_old'
     ALLOWED_EXTENSIONS = set(['xml','mzid','mztab', 'mzML', 'mgf', 'MGF', 'gz'])
     parser = reqparse.RequestParser()
     parser.add_argument('jobId')
@@ -166,8 +166,8 @@ class DoAnalysis(Resource):
             parameter_quiet = "-t y "
             command_line = python_path + pipeline_path + parameter_accession_id + parameter_cluster_size + parameter_quiet
 
-        # this part is used to test if the invoke are working fine or not
-        #     command_line = "/usr/bin/python3 /tmp/test.py"
+        # this part is used to test_old if the invoke are working fine or not
+        #     command_line = "/usr/bin/python3 /tmp/test_old.py"
         #     print("start to execute " + command_line)
         #     output = os.popen(command_line).readlines()
         #     print(''.join(output) + "\n")

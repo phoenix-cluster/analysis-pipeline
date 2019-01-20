@@ -1,16 +1,17 @@
-from docopt import docopt
-import sys
-import csv
+# from docopt import docopt
+# import sys
+# import csv
 import operator
 import os
-import ntpath
+# import ntpath
 from lxml import etree
-try:
-    import xml.etree.cElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET
+from pathlib import Path
+# try:
+#     import xml.etree.cElementTree as ET
+# except ImportError:
+#     import xml.etree.ElementTree as ET
 import re
-from requests import structures as structures
+# from requests import structures as structures
 
 def get_scfield_peakfile(filename):
     """
@@ -19,10 +20,6 @@ def get_scfield_peakfile(filename):
     :param filename:
     :return:
     """
-    tree = ET.ElementTree(file=filename)
-    root = tree.getroot()
-    namespace = get_namespace(tree.getroot())
-
     #get score field
     score_fields=[
         "Scaffold:Peptide Probability",
@@ -30,7 +27,52 @@ def get_scfield_peakfile(filename):
         "X\\!Tandem:expect",
         "mascot:expectation value"
     ]
-    score_field = None
+
+    tree = etree.parse(filename)
+
+    root = tree.getroot()
+    namespace = get_namespace(root)
+
+    xpath_tag_str = ".//*[translate(local-name(), \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\", \"abcdefghijklmnopqrstuvwxyz\")=$tagname]"
+    ident_elem_list = root.xpath(xpath_tag_str, tagname="spectrumidentificationitem", namespaces={'ns':namespace[1:-1]})
+    print("len of id elem list %d"%len(ident_elem_list))
+    spec_ident_all_attrib = ""
+    score_field = ""
+    for id_elem in ident_elem_list:
+        for subelem in list(id_elem):
+            spec_ident_all_attrib += str(subelem.attrib).lower()
+        for temp_field in score_fields:
+            if score_field.lower() in spec_ident_all_attrib:
+                score_field = temp_field
+                break
+        if score_field == "":
+            raise Exception("Failed to find score field in mzIdentML file.")
+        else:
+            break
+
+    print("start to get peak files")
+    #get peak files
+    peak_files = list()
+    spectra_list = root.xpath(xpath_tag_str, tagname="spectradata", namespaces={'ns':namespace[1:-1]})
+    for spec_data in spectra_list:
+        location = spec_data.attrib['location']
+        norm_peak_file_path =  os.path.normpath(location)
+        norm_peak_file_path = norm_peak_file_path.replace('\\', os.sep)
+        peak_file_name = os.path.basename(norm_peak_file_path)
+        print(peak_file_name)
+        peak_files.append(peak_file_name)
+    if len(peak_files)> 1:
+        raise Exception("MzIdentML file %s has multiple peak files: %s, %s..."%(filename, peak_files[0], peak_files[1]))
+
+    return (score_field, peak_files[0])
+
+########################
+    """
+    tree = ET.ElementTree(file=filename)
+    root = tree.getroot()
+    namespace = get_namespace(tree.getroot())
+
+
     attrib_string = ""
     for elem in tree.iter(tag="%sSpectrumIdentificationItem" % (namespace)):
         for subelem in list(elem):
@@ -51,10 +93,8 @@ def get_scfield_peakfile(filename):
         location = spec_data.attrib['location']
         peak_file_name = ntpath.basename(location)
         peak_files.append(peak_file_name)
-    if len(peak_files)> 1:
-        raise Exception("MzIdentML file %s has multiple peak files: %s, %s..."%(filename, peak_files[0], peak_files[1]))
+    """
 
-    return (score_field, peak_files[0])
 
 def get_score_from_spec_ident(spec_ident, score_field):
     for subelem in list(spec_ident):
@@ -121,7 +161,6 @@ def parser_mzident(filename, score_field, title_field=None,
     :param decoy_string: String used to identify decoy proteins.
     :param include_decoy: If set to True decoy hits are also returned.
     :return: A list of PSM objects
-    """
     mzid_psms = list()
 
     # load all PSMs from the file
@@ -247,6 +286,7 @@ def parser_mzident(filename, score_field, title_field=None,
             #                          is_decoy=mzid_psm["is_decoy"], ptms=mzid_psm.get("ptms", None)))
 
     return filtered_psms
+    """
 
 def parser_mzident2(filename, score_field, title_field=None,
                    fdr=0.01, larger_score_is_better=False, decoy_string="DECOY",

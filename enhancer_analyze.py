@@ -64,10 +64,7 @@ def main():
     lib_search_results = None
     input_path = project_id + '/'
     sr_csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
-    try:
-        lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file) #retrieve the library search results and export them to file/mysql_acc db
-    except Exception as err:
-        logging.info("error in retriving spectraST search result file %s"%(err))
+    lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file) #retrieve the library search results and export them to file/mysql_acc db
 
     elapsed = time.clock() - start
     logging.info("%s retriving lib search results takes time: %f"%(project_id, elapsed))

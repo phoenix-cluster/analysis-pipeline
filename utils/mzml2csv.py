@@ -16,7 +16,7 @@ Options:
     -p <projectid>,--projectid <projectid>          project file type
 
 Example
-    mzml2csv.py -p PXD003452 -i test.mzml
+    mzml2csv.py -p PXD003452 -i test_old.mzml
 """
 
 from docopt import docopt
