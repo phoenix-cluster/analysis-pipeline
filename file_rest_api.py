@@ -1,18 +1,26 @@
-from flask import Flask
-from flask_restful import reqparse, abort, Api, Resource
 import os, sys, time
+sys.path.insert(0, "./venv/lib/python3.4/site-packages")
+
+from flask import Flask, request
+from flask_restful import reqparse, abort, Api, Resource
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 import mysql_storage_access as mysql_acc
 
-app = Flask(__name__)
-api = Api(app)
 
-def abort_if_todo_doesnt_exist(todo_id):
-    if todo_id not in TODOS:
-        abort(404, message="Todo {} doesn't exist".format(todo_id))
+def after_request(response):
+  response.headers.add('Access-Control-Allow-Origin', 'http://namenode:4201')
+  # response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,undefined')
+  response.headers.add('Access-Control-Allow-Headers', '*, undefined, accessionId, token, analysisId')
+  # response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+  response.headers.add('Access-Control-Allow-Credentials', 'true')
+  return response
+
+app = Flask(__name__)
+app.after_request(after_request)
+api = Api(app)
 
 
 # File upload
@@ -33,9 +41,11 @@ class FileUpload(Resource):
     def post(self):
         data = self.parser.parse_args()
         uploaded_files = data['file']
-        accession_id = data['accessionId']
-        id = int(data['jobId'])
-        token = data['token']
+        accession_id = request.headers['accessionId']
+        token = request.headers['token']
+        id = int(request.headers['analysisId'])
+        if not accession_id:
+            return{'message':"None accessionId", 'status':'error'}
 
         analysis_job = mysql_acc.get_analysis_job(id)
         if analysis_job.get('token') != token:
@@ -54,7 +64,9 @@ class FileUpload(Resource):
         month = time.strftime("%Y%m", time.localtime())
         date = time.strftime("%Y%m%d", time.localtime())
         project_path = os.path.join(self.UPLOAD_FOLDER, month, accession_id)
+        print("start to make project path")
         if not os.path.exists(project_path):
+            print("path not exist, making %s"%project_path)
             os.makedirs(project_path)
         mysql_acc.update_analysis_job(id, project_path, date, 0, accession_id)
         failed_files = list()
@@ -65,7 +77,7 @@ class FileUpload(Resource):
                 return {"message":"file name is null for %s"%uploaded_file, 'status':'error'}
             if self.allowed_file(filename):
                 filename = secure_filename(filename)
-                uploaded_file.save(os.path.join(self.UPLOAD_FOLDER,filename))
+                uploaded_file.save(os.path.join(project_path, filename))
                 succ_files.append(filename)
             else:
                 failed_files.append(filename)
@@ -89,37 +101,44 @@ class FileUpload(Resource):
                }
 
 
-# Analysis Job apis
+# confirm uploaded file
 #
 class FileConfirm(Resource):
 
-    parser = reqparse.RequestParser()
-    parser.add_argument('analysisId')
-    parser.add_argument('resultFileList')
-
+    RESULT_FILE_NAME = "resultFiles.txt"
 
     def is_file_list_correct(self, result_file_list, file_dir):
         nonexist_files = list()
         for file in result_file_list.get('fileList'):
             filename = file.get('fileName')
             # filetype = file.get('fileType')
-            if not os.path.isfile() or not os.path.getsize(os.path.join(file_dir, filename)):
+            if not os.path.isfile(os.path.join(file_dir, filename)) or not os.path.getsize(os.path.join(file_dir, filename)):
                 nonexist_files.append(filename)
         return nonexist_files
 
+    def write_to_result_file(self, file_dir, result_file_list):
+        with open(os.path.join(file_dir, self.RESULT_FILE_NAME), 'w') as f:
+            for file_item in result_file_list.get("fileList"):
+                filename = file_item.get('fileName')
+                filetype = file_item.get('fileType')
+                f.write("%s\t\t%s"%(filename, filetype))
+
+
     def post(self):
-        args = self.parser.parse_args()
-        analysis_id = int(args['analysisId'])
-        result_file_list = args['resultFileList']
+        json_data = request.get_json(force=True)
+        if not request.headers['analysisId']:
+            return{'message':"None analysis Id", 'status':'error'}
+        analysis_id = int(request.headers['analysisId'])
+        result_file_list = json_data
         analysis_job = mysql_acc.get_analysis_job(analysis_id);
         nonexist_files = self.is_file_list_correct(result_file_list, analysis_job.get('file_path'))
         message = {'id':analysis_id, 'message':'', 'status':''}
-        if len(nonexist_files):
-            print("you got " + result_file_list.get('fileListLength') + ": " + str(result_file_list) + " files in AnalysisJob E%06d" % analysis_id);
+        if len(nonexist_files) < 1:
+            print("you got %d  files: '%s' in AnalysisJob E%06d" % (int(result_file_list.get('fileListLength')), str(result_file_list) , analysis_id))
             message['status'] = "success"
-            status, file_dir = mysql_acc.get_status_and_file_path
-            self.write_to_result_file(file_dir, result_file_list);
-            mysql_acc.update_analysis_job_status(analysis_id, "uploaded");
+            status, file_dir = mysql_acc.get_status_and_file_path(analysis_id)
+            self.write_to_result_file(file_dir, result_file_list)
+            mysql_acc.update_analysis_job_status(analysis_id, "uploaded")
         else:
             message['status'] = "error"
             message['message'] = "The file list is not as same as in the web server. " + \
@@ -127,16 +146,9 @@ class FileConfirm(Resource):
         return message
 
 
-
 # Analysis Job apis
 #
 class DoAnalysis(Resource):
-
-    parser = reqparse.RequestParser()
-    parser.add_argument('analysisId')
-    parser.add_argument('minClusterSize')
-    parser.add_argument('userEmailAdd')
-    parser.add_argument('isPublic')
 
     def __is_analysis_started(self, status):
         if (status.lower() == "started" or status.lower() == "finished" or status.lower() == "finished_with_error"):
@@ -144,18 +156,19 @@ class DoAnalysis(Resource):
         else:
             return False
 
-    def __do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
+    def do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
+        # def __do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
+        print("ispublic%s"%is_public)
         mysql_acc.update_analysis_email_public(analysis_id, user_email_add, is_public)
-        status, analysis_job_file_path= mysql_acc.get_status_and_file_path(analysis_id)
+        status, analysis_job_path= mysql_acc.get_status_and_file_path(analysis_id)
+        print("analysis job file path: %s" % analysis_job_path)
 
-
-        file_dir = os.path.dirname(analysis_job_file_path)
-        working_dir = os.path.dirname(os.path.normpath(file_dir))
+        working_dir = os.path.dirname(os.path.normpath(analysis_job_path))
 
         print("working dir %s"%working_dir)
 
         try:
-            if self.__is_analysis_started(status):
+            if self.__is_analysis_started(self, status=status):
                 print("The analysis job %06d has been started"%(analysis_id))
                 return "The analysis job %06d has been started"%(analysis_id)
             accessionId = "E%06d"%(analysis_id)
@@ -173,8 +186,8 @@ class DoAnalysis(Resource):
         #     print(''.join(output) + "\n")
 
         #rename the resultFile.txt fr running, avoid multiple jobs being invoked at the same time
-            result_file =  os.path.join(file_dir, "resultFiles.txt")
-            running_result_file =  os.path.join(file_dir, "resultFiles.txt.started")
+            result_file =  os.path.join(analysis_job_path, "resultFiles.txt")
+            running_result_file =  os.path.join(analysis_job_path, "resultFiles.txt.started")
             print("result file %s" %result_file)
             if os.path.isfile(result_file):
                 os.rename(result_file, running_result_file)
@@ -199,8 +212,8 @@ class DoAnalysis(Resource):
         except Exception as err:
             print(err)
 
-        status, analysis_job_file_path= mysql_acc.get_status_and_file_path(analysis_id)
-        if self.__is_analysis_started(status):
+        status, analysis_job_path= mysql_acc.get_status_and_file_path(analysis_id)
+        if self.__is_analysis_started(self, status):
             print("The analysis job is started")
             return "The analysis job is started"
         else :
@@ -210,13 +223,29 @@ class DoAnalysis(Resource):
 
     def post(self):
 
-        args = self.parser.parse_args()
-        analysis_id = int(args['analysisId'])
-        min_cluster_size = int(args['minClusterSize'])
-        user_email_add = args['userEmailAdd']
-        is_public = bool(args['isPublic'])
+        analysis_id = int(request.headers.get('analysisId', None))
+        min_cluster_size = int(request.headers.get('minClusterSize', None))
+        user_email_add = request.headers.get('userEmailAdd', None)
+        is_public = request.headers.get('isPublic', None)
+
+        if not analysis_id or not min_cluster_size or not user_email_add or not is_public:
+            return{'message':"missing parameters, please have a check", 'status':'error'}
+        print("start to do analysis on project %d"%analysis_id)
         return_msg = self.__do_analysis(analysis_id, min_cluster_size, user_email_add, is_public)
         return return_msg, 201
+
+class Test(Resource):
+
+    parser = reqparse.RequestParser()
+    parser.add_argument('para')
+
+    def get(self):
+        args = self.parser.parse_args()
+        para = args['para']
+        return_msg = {'status':"OK",
+                      'message':"Got your input para: %s"%para
+                      }
+        return return_msg,200
 
 
 ##
@@ -225,7 +254,9 @@ class DoAnalysis(Resource):
 api.add_resource(DoAnalysis, '/analysis/do')
 api.add_resource(FileUpload, '/file/upload')
 api.add_resource(FileConfirm, '/file/confirm')
+api.add_resource(Test, '/test')
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port='5000', debug=True)
+    # app.run(host="0.0.0.0", port='5001', debug=True)
+    DoAnalysis.do_analysis(DoAnalysis, analysis_id=54, min_cluster_size=10, user_email_add='bmze@qq.com', is_public=False)
 

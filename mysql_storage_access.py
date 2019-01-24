@@ -651,7 +651,7 @@ def update_analysis_email_public(analysis_id, user_email_add, is_public):
     cursor = conn.cursor()
     project_ana_record_table_name = "T_analysis_record".upper()
     upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
-                     "EMAIL_ADD='%s', ISPUBLIC='%s' WHERE id ='%d'"%(user_email_add, is_public,analysis_id)
+                     "EMAIL_ADD='%s', ISPUBLIC=%s WHERE id =%d"%(user_email_add, is_public,analysis_id)
     try:
         cursor.execute(upsert_sql)
         conn.commit()
@@ -667,7 +667,7 @@ def update_analysis_job(analysis_id, file_path, date, user_id, accession_id):
     project_ana_record_table_name = "T_analysis_record".upper()
     upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
                      "FILE_PATH='%s', UPLOAD_DATE='%s', USER_ID=%d, ACCESSION='%s' \
-                     WHERE id ='%d'"%\
+                     WHERE id =%d"%\
                  (file_path, date, user_id, accession_id, analysis_id)
     try:
         cursor.execute(upsert_sql)
@@ -683,7 +683,7 @@ def update_analysis_job_status(analysis_id, status):
     cursor = conn.cursor()
     project_ana_record_table_name = "T_analysis_record".upper()
     upsert_sql = "UPDATE " + project_ana_record_table_name + " SET " + \
-                     "STATUS='%s' WHERE id ='%d'"%(status, analysis_id)
+                     "STATUS='%s' WHERE id =%d"%(status, analysis_id)
     try:
         cursor.execute(upsert_sql)
         conn.commit()

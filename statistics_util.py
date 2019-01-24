@@ -5,7 +5,7 @@ import logging
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
-import phoenix_storage_access as phoenix
+# import phoenix_storage_access as phoenix
 import mysql_storage_access as mysql_acc
 
 cluster_table_prefix = "V_CLUSTER"
