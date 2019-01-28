@@ -100,35 +100,51 @@ def create_views(project_id, thresholds):
 
 def get_row_count(table_name, cursor):
     select_sql = "select count(*) from %s" % (table_name)
-    cursor.execute(select_sql)
-    rs = cursor.fetchone()
-    if rs == None:
+    try:
+        cursor.execute(select_sql)
+        rs = cursor.fetchone()
+        if rs == None:
+            return 0
+        return rs[0]
+    except Exception as e:
+        logging.error("ERROR in executing sql: %s"%select_sql)
+        logging.error(e)
         return 0
-    return rs[0]
 
 def get_sum_spec(table_name, cursor):
     select_sql = "select sum(NUM_SPEC) from %s" % (table_name)
-    cursor.execute(select_sql)
-    rs = cursor.fetchone()
-    if rs == None:
+    try:
+        cursor.execute(select_sql)
+        rs = cursor.fetchone()
+        if rs == None:
+            return 0
+        return rs[0]
+    except Exception as e:
+        logging.error("ERROR in executing sql: %s, info: %s"%(select_sql, e))
         return 0
-    return rs[0]
 
 
 
 def get_matched_id_spec_no(project_id, identified_spectra, cursor):
+    if identified_spectra is None or len(identified_spectra) < 1:
+        return 0
+
     matched_spec = set()
+    try:
+        select_sql = "select spec_title from V_%s_SPEC_CLUSTER_MATCH "%project_id.upper()
+        cursor.execute(select_sql)
+        rs = cursor.fetchall()
+        for r in rs:
+            matched_spec.add(r[0])
 
-    select_sql = "select spec_title from V_%s_SPEC_CLUSTER_MATCH "%project_id.upper()
-    cursor.execute(select_sql)
-    rs = cursor.fetchall()
-    for r in rs:
-        matched_spec.add(r[0])
+        identified_spec = set(identified_spectra.keys())
+        intersection_spec = matched_spec.intersection(identified_spec)
+        print("get %d intersection spec"%len(intersection_spec))
+        return (len(intersection_spec))
+    except Exception as e:
+        logging.ERROR("ERROR in executing sql: %s, info: %s"%(select_sql, e))
+        return 0
 
-    identified_spec = set(identified_spectra.keys())
-    intersection_spec = matched_spec.intersection(identified_spec)
-    print("get %d intersection spec"%len(intersection_spec))
-    return (len(intersection_spec))
 
     # select_sql = "select count(*) from V_%s_SPEC_CLUSTER_MATCH a, T_%s_PSM b where a.SPEC_TITLE = b.SPECTRUM_TITLE"  % (project_id.upper(), project_id.upper())
     # cursor.execute(select_sql)

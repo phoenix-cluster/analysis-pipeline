@@ -368,28 +368,32 @@ Retrive identification/psms from mysql db
 def retrieve_identification_from_db(project_id, output_file):
     conn = get_conn()
     cursor = conn.cursor()
-    table_name = "T_" + project_id.upper() + "_psm".upper()
-    sql_str = "SELECT count(*) FROM " + table_name + "";
-    cursor.execute(sql_str)
-    r = cursor.fetchone()
-    total_n = r[0]
-
-    psms = dict()
-    offset = 0
-    while (offset < total_n):
-        sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE, MODIFICATIONS FROM " + table_name + " LIMIT 5000 OFFSET " + str(
-            offset)
+    try:
+        table_name = "T_" + project_id.upper() + "_psm".upper()
+        sql_str = "SELECT count(*) FROM " + table_name + "";
         cursor.execute(sql_str)
-        rs = cursor.fetchall()
-        for r in rs:
-            spec_title = r[0]
-            id_seq = r[1]
-            id_mods = r[2]
-            psms[spec_title] = {'id_seq': id_seq, 'id_mods': id_mods}
-        offset += 5000
+        r = cursor.fetchone()
+        total_n = r[0]
 
-    cursor.close()
-    conn.close()
+        psms = dict()
+        offset = 0
+        while (offset < total_n):
+            sql_str = "SELECT SPECTRUM_TITLE, PEPTIDE_SEQUENCE, MODIFICATIONS FROM " + table_name + " LIMIT 5000 OFFSET " + str(
+                offset)
+            cursor.execute(sql_str)
+            rs = cursor.fetchall()
+            for r in rs:
+                spec_title = r[0]
+                id_seq = r[1]
+                id_mods = r[2]
+                psms[spec_title] = {'id_seq': id_seq, 'id_mods': id_mods}
+            offset += 5000
+    except Exception as e:
+        logging.error("ERROR in select data from psm table: %s, info: %s"%(table_name, e))
+        return None
+    finally:
+        cursor.close()
+        conn.close()
 
     if output_file != None:
         with open(output_file, "w") as o:

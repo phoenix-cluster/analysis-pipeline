@@ -126,12 +126,10 @@ def get_ms_runs(result_files):
     :return:
     """
     ms_runs = list()
-    peak_files = list()
     for file in result_files:
         filetype = file.get("filetype")
         filename = file.get("filename")
         if filetype=="peak":  #don't consider the peak files as ms_run files
-            peak_files.append(filename)
             continue
         ms_run_name = ""
         psmfiletype = ""
@@ -163,6 +161,8 @@ def get_ms_runs(result_files):
             raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz or .mzid/.mztab or .mzid.gz/.mztab.gz" % (file))
         ms_runs.append({"name":ms_run_name, "psmfiletype":psmfiletype, "filetype":filetype, "filename":filename})
 
+    if len(ms_runs) < 1:
+        raise Exception("There is no psm files in the file list")
     return ms_runs
 
 def create_unzip_shell_files(project_id, result_files):
@@ -259,6 +259,8 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
             if psmfiletype == "mztab":
                 raise Exception("mztab is not supported right now, please wait for our upgrade")
             filename = ms_run['filename']
+            if filename.endswith(".gz"):
+                filename = filename[:-3]
             peakfile = ms_run['peakfile']
             peakfile_option = "--peakfile %s"%peakfile
 

@@ -15,6 +15,10 @@ def json_stand(string):
 build matched spec details data from search_results, identified spectra(to add seq info) and cluster data(to add cluster info).
 """
 def build_matched_spec(search_results, identified_spectra, cluster_data):
+    #if none identification data found
+    if not identified_spectra or len(identified_spectra) < 1:
+        return None
+
     matched_spec = list()
     # psm_dict = dict()
     for spec_title in search_results.keys():
@@ -102,6 +106,8 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
 translate matched details from dict to list
 """
 def trans_matched_spec_to_list(matched_spec_dict):
+    if matched_spec_dict is None:
+        return None
     matched_spec = list()
     for spec_title in matched_spec_dict.keys():
         matching = matched_spec_dict.get(spec_title)
@@ -136,10 +142,11 @@ def write_matched_spec_to_csv(matched_spec, output_file):
         "conf_sc",
         "recomm_seq_sc",
     ]
-
     with open(output_file, 'w', newline="") as f:
         w = csv.writer(f)
         w.writerow(field_names)
+        if matched_spec is None or len(matched_spec) < 1:
+            return
         for row in matched_spec:
             w.writerow(row)
     logging.info("Done write_matched_spec_to_csv, %d matched details have been written"%len(matched_spec))
@@ -175,8 +182,8 @@ def read_identification_from_csv(csv_files):
     new_dict = {}
     for csv_file in csv_files:
         if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
-            print("no csv found: %s"%(csv_file))
-            logging.info("no csv found: %s"%(csv_file))
+            print("no csv file found: %s"%(csv_file))
+            logging.info("no csv file found: %s"%(csv_file))
             return None
         print("start to read identification from csv")
         logging.info("start to read identification from csv")

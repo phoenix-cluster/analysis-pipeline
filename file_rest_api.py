@@ -156,8 +156,7 @@ class DoAnalysis(Resource):
         else:
             return False
 
-    def do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
-        # def __do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
+    def __do_analysis(self, analysis_id, min_cluster_size, user_email_add, is_public):
         print("ispublic%s"%is_public)
         mysql_acc.update_analysis_email_public(analysis_id, user_email_add, is_public)
         status, analysis_job_path= mysql_acc.get_status_and_file_path(analysis_id)
@@ -168,7 +167,7 @@ class DoAnalysis(Resource):
         print("working dir %s"%working_dir)
 
         try:
-            if self.__is_analysis_started(self, status=status):
+            if self.__is_analysis_started(status=status):
                 print("The analysis job %06d has been started"%(analysis_id))
                 return "The analysis job %06d has been started"%(analysis_id)
             accessionId = "E%06d"%(analysis_id)
@@ -213,7 +212,7 @@ class DoAnalysis(Resource):
             print(err)
 
         status, analysis_job_path= mysql_acc.get_status_and_file_path(analysis_id)
-        if self.__is_analysis_started(self, status):
+        if self.__is_analysis_started(status):
             print("The analysis job is started")
             return "The analysis job is started"
         else :
@@ -257,6 +256,6 @@ api.add_resource(FileConfirm, '/file/confirm')
 api.add_resource(Test, '/test')
 
 if __name__ == '__main__':
-    # app.run(host="0.0.0.0", port='5001', debug=True)
-    DoAnalysis.do_analysis(DoAnalysis, analysis_id=54, min_cluster_size=10, user_email_add='bmze@qq.com', is_public=False)
+    app.run(host="0.0.0.0", port='5001', debug=True)
+    # DoAnalysis.do_analysis(DoAnalysis, analysis_id=54, min_cluster_size=10, user_email_add='bmze@qq.com', is_public=False)
 
