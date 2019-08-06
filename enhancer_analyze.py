@@ -75,6 +75,7 @@ def main():
 #    spec_file = project_id + "/" + project_id + "_spec.csv"
     spec_files = glob.glob(project_id + "/*_spec.csv")
     psm_files = glob.glob(project_id + "/*_psm.csv")
+    cluster_taxid_csv_path = "/data/6.20/testhbase/data/201504/taxids.csv"
     logging.info("start to read identification from csv")
     print("start to read identification from csv")
     identified_spectra  = psm_util.read_identification_from_csv(psm_files)
@@ -115,7 +116,7 @@ def main():
     mysql_acc.create_project_ana_record_table()
     thresholds = stat_util.default_thresholds
     thresholds["cluster_size_threshold"] = min_cluster_size
-    (p_score_psm_list, n_score_psm_list, new_psm_list) = score_psms.build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict)
+    (p_score_psm_list, n_score_psm_list, new_psm_list) = score_psms.build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict,cluster_taxid_csv_path)
     mysql_acc.upsert_score_psm_table(project_id, p_score_psm_list, n_score_psm_list, new_psm_list)
     elapsed = time.clock() - start
     logging.info("%s build score psm table takes time: %f"%(project_id, elapsed))

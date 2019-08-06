@@ -11,7 +11,7 @@ config = configparser.ConfigParser()
 config.read("%s/config.ini"%(file_dir))
 
 cluster_table = config.get("Database", "cluster_table")
-lib_spec_table = config.get("Database", "lib_spec_table")
+#lib_spec_table = config.get("Database", "lib_spec_table")
 
 """
 Get connection 
@@ -243,6 +243,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "spectra LONGBLOB, " + \
                        "pre_seq TEXT, " + \
                        "pre_mods TEXT," + \
+                       "seq_taxids VARCHAR(1000)" + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)
@@ -264,6 +265,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "pre_mods  TEXT, " + \
                        "recomm_seq TEXT, " + \
                        "recomm_mods  TEXT, " + \
+                       "seq_taxids VARCHAR(1000)" + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)
@@ -282,6 +284,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "spectra LONGBLOB, " + \
                        "recomm_seq TEXT, " + \
                        "recomm_mods TEXT, " + \
+                       "seq_taxids VARCHAR(1000)" + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)
@@ -291,9 +294,9 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
 #    upsert_n_score_psm_sql = "replace into " + n_score_psm_table_name + " values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 #    upsert_new_psm_sql = "replace into " + new_psm_table_name + " values (?,?,?,?,?,?,?,?,?,?,?)"
 
-    upsert_p_score_psm_sql = "insert into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-    upsert_n_score_psm_sql = "insert into " + n_score_psm_table_name.upper() + " (row_id,conf_sc,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, acceptance) values(%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s)"
-    upsert_new_psm_sql = "insert into " + new_psm_table_name.upper() + " (row_id,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    upsert_p_score_psm_sql = "insert into " + p_score_psm_table_name.upper() + " (row_id,conf_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, seq_taxids, acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    upsert_n_score_psm_sql = "insert into " + n_score_psm_table_name.upper() + " (row_id,conf_sc,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, seq_taxids,  acceptance) values(%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s)"
+    upsert_new_psm_sql = "insert into " + new_psm_table_name.upper() + " (row_id,recomm_seq_sc,cluster_id,cluster_ratio,cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, seq_taxids,  acceptance) values(%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
 
 
@@ -607,6 +610,7 @@ def get_analysis_job(analysis_id):
     cursor = conn.cursor()
     project_ana_record_table_name = "T_analysis_record".upper()
     select_str = "SELECT * FROM  %s  WHERE ID = %d"%(project_ana_record_table_name ,analysis_id)
+    print(select_str)
     try:
         cursor.execute(select_str)
         result = cursor.fetchone()

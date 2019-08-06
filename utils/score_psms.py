@@ -1,14 +1,31 @@
 
 import logging
+import json, csv
+
+
+#read cluster_taxid map from csv file
+def read_cluster_taxid_map(cluster_taxid_csv):
+    cluster_taxid_map = dict()
+    with open(cluster_taxid_csv, mode='r') as infile:
+        reader = csv.reader(infile)
+        for row in reader:
+            cluster_taxid_map[row[0]] = ", ".join(row[1:])
+
+    return cluster_taxid_map
+
+
 
 """
 Build 3 score psm list from cluster_data and matched_spec_details_dict. 
 """
-def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict):
+def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cluster_taxid_csv_path):
     #remove the psms violents the conf_sc/recomm_seq_sc threshods
     #group the matched spec by cluster
     spectra_matched_to_cluster = dict()
     unid_spec_matched_to_cluster = dict()  # cluster_id as the key
+
+    cluster_taxid_map = read_cluster_taxid_map(cluster_taxid_csv_path)
+
     removed_spec_no = 0
     retail_spec_no = 0
     logging.info("Start to  process %d matched spectra in build_score_psm_list function."%(len(matched_spec_details_dict)))
@@ -60,6 +77,11 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict):
             logging.info(matched_spectra)
         n_id = 0
         n_unid = 0
+
+        #get the taxid info for each cluster
+        seq_taxid = cluster_taxid_map.get(cluster_id).replace("'", "\"")
+        seq_taxid_map = json.loads(seq_taxid)
+
         for matched_spec in matched_spectra:
             spec_match = matched_spec_details_dict.get(matched_spec, None)
             pre_seq = spec_match.get('pre_seq')
@@ -97,13 +119,15 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict):
             cluster_ratio = float(spec_match.get('cluster_ratio'))
             cluster_size = int(spec_match.get('cluster_size'))
             if conf_score > 0:
-                p_score_psm_list.append((len(p_score_psm_list)+1, conf_score, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, 0))
+                pre_seq_taxid = str(seq_taxid_map.get(pre_seq)).replace("'","")
+                p_score_psm_list.append((len(p_score_psm_list)+1, conf_score, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, pre_seq_taxid, 0))
                 # logging.info("add num_spec: %d" % num_spec)
                 n_id_in_p_score_list += num_spec
             if conf_score < 0:
                 recomm_seq = spec_match.get('recomm_seq')
                 recomm_mods = spec_match.get('recomm_mods')
-                n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, 0))
+                recomm_seq_taxid = str(seq_taxid_map.get(recomm_seq)).replace("'","")
+                n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, recomm_seq_taxid, 0))
 
         # logging.info("cluster %s matched to %d id spec in matched_peptides"%(cluster_id, n_id))
         # logging.info("%d spec in p_score_list"%(n_id_in_p_score_list))
@@ -120,7 +144,9 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict):
             recomm_mods = spec_match.get('recomm_mods')
             spectra = "||".join(matched_unid_spec)
 
-            new_psm_list.append((len(new_psm_list)+1, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, 0))
+            recomm_seq_taxid = str(seq_taxid_map.get(recomm_seq)).replace("'","")
+            new_psm_list.append((len(new_psm_list)+1, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, recomm_seq_taxid, 0))
 
 
     return (p_score_psm_list, n_score_psm_list, new_psm_list)
+

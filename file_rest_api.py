@@ -5,13 +5,18 @@ from flask import Flask, request
 from flask_restful import reqparse, abort, Api, Resource
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
-file_dir = os.path.dirname(__file__)
+import configparser
+
+file_dir = os.path.abspath('.')
 sys.path.append(file_dir)
 import mysql_storage_access as mysql_acc
 
+config = configparser.ConfigParser()
+config.read("%s/config.ini"%(file_dir))
+
 
 def after_request(response):
-  response.headers.add('Access-Control-Allow-Origin', 'http://namenode:4201')
+  response.headers.add('Access-Control-Allow-Origin', 'http://enhancer.ncpsb.org')
   # response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,undefined')
   response.headers.add('Access-Control-Allow-Headers', '*, undefined, accessionId, token, analysisId')
   # response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
@@ -26,10 +31,10 @@ api = Api(app)
 # File upload
 #
 class FileUpload(Resource):
-    UPLOAD_FOLDER = '/data/phoenix_enhancer/test_old'
+    UPLOAD_FOLDER = config.get("Web", "upload_dir")
     ALLOWED_EXTENSIONS = set(['xml','mzid','mztab', 'mzML', 'mgf', 'MGF', 'gz'])
     parser = reqparse.RequestParser()
-    parser.add_argument('jobId')
+    parser.add_argument('analysisId')
     parser.add_argument('accessionId')
     parser.add_argument('token')
     parser.add_argument('file', type=FileStorage, location='files', action='append')
@@ -256,6 +261,10 @@ api.add_resource(FileConfirm, '/file/confirm')
 api.add_resource(Test, '/test')
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port='5001', debug=True)
+    host = config.get("Web", "host")
+    port = config.get("Web", "port")
+    debug = config.get("Web", "debug")
+
+    app.run(host=host, port=port, debug=debug)
     # DoAnalysis.do_analysis(DoAnalysis, analysis_id=54, min_cluster_size=10, user_email_add='bmze@qq.com', is_public=False)
 
