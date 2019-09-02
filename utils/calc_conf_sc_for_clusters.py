@@ -3,6 +3,7 @@ import sys, os
 import logging
 import time
 import json
+import csv
 file_dir = os.path.dirname(os.path.realpath(__file__))
 parent_path = os.path.abspath(os.path.join(file_dir, os.pardir))
 sys.path.append(file_dir)
@@ -15,7 +16,8 @@ import mysql_storage_access as mysql_acc
 
 
 def main():
-    calculate_to_mysql()
+    # calculate_to_mysql()
+    calculate_to_csv()
     pass
 
 def calculate_to_phoenix():
@@ -33,6 +35,26 @@ def calculate_to_mysql():
         cluster['conf_sc'] = json.dumps(scores)
 
     mysql_acc.upsert_cluster_conf_sc('T_CLUSTER_TEST', clusters)
+
+
+def calculate_to_csv():
+    origin_cluster_csv_file = "clusters_min5_old.csv"
+    new_cluster_csv_file = "clusters_min5.csv"
+    with open(origin_cluster_csv_file, 'r') as f:
+        reader = csv.reader(f, delimiter=',',skipinitialspace=True)
+        fieldnames = next(reader)
+        reader = csv.DictReader(f, fieldnames=fieldnames, delimiter=',', skipinitialspace=True)
+        clusters = list()
+        for row in reader:
+            cluster = dict(row)
+            scores = conf_sc_calc.calculate_conf_sc_for_a_cluster(cluster)
+            cluster['conf_sc'] = scores
+            clusters.append(cluster)
+
+        with open(new_cluster_csv_file, 'w') as f:
+            w = csv.DictWriter(f, fieldnames)
+            w.writeheader()
+            w.writerows(clusters)
 
 
 if __name__ == "__main__":

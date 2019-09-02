@@ -21,6 +21,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
 
     matched_spec = list()
     # psm_dict = dict()
+    logging.info("start to build matched spec details")
     for spec_title in search_results.keys():
         search_result = search_results.get(spec_title)
         dot = float(search_result.get('dot'))
@@ -33,6 +34,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
         cluster_conf_sc_str = json_stand(cluster.get('conf_sc'))
         seqs_ratios_str = json_stand(cluster.get('seqs_ratios'))
         seqs_mods_str = cluster.get('seqs_mods')
+
 
         conf_sc_dict = None
         seqs_ratios_dict = None
@@ -54,6 +56,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
                 max_sc = float(conf_sc_dict.get(each_seq))
                 max_sc_seq = each_seq
 
+
         identification = identified_spectra.get(spec_title)
         recomm_seq = ""
         recomm_mods = ""
@@ -70,23 +73,27 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
             if pre_mods == None:
                 pre_mods = identification.get('id_mods')
 
-            il_seq = pre_seq.replace('I', 'L')
+            # il_seq = pre_seq.replace('I', 'L')
 
-            seq_ratio = seqs_ratios_dict.get(il_seq, -1)
+            seq_ratio = float(seqs_ratios_dict.get(pre_seq, -1))
 
-            if seq_ratio == cluster_ratio:  # this seq matches to the highest score seq
+            if abs(seq_ratio - cluster_ratio) <= 0.001:  # this seq matches to the highest score seq
                 recomm_seq = "PRE_"
                 recomm_mods = ""
-                conf_sc = float(conf_sc_dict.get(il_seq))
+                conf_sc = float(conf_sc_dict.get(pre_seq, -1))
+                if abs(conf_sc + 1) <=0.001:  #pre_seq has matched seq_ratio but not in conf_sc_dict, error
+                    logging.error("Found no conf_sc for pre_seq %s" %(pre_seq))
+                    logging.error("From conf_sc_dict %s" %(conf_sc_dict))
                 recomm_seq_sc = conf_sc
-            elif il_seq in conf_sc_dict.keys():  # this seq matches to the lower score seq
+            elif pre_seq in conf_sc_dict.keys():  # this seq matches to the lower score seq
                 recomm_seq = "R_Better_" + max_sc_seq
                 if mods_dict:
                     recomm_mods = mods_dict.get(max_sc_seq)
                 else:
                     recomm_mods = ""
-                conf_sc = float(conf_sc_dict.get(il_seq))
+                conf_sc = float(conf_sc_dict.get(pre_seq))
                 recomm_seq_sc = max_sc
+
         else:  # this seq matches non seq in the cluster
             pre_seq = ''
             pre_mods = ''

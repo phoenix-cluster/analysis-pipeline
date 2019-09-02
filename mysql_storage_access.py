@@ -243,7 +243,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "spectra LONGBLOB, " + \
                        "pre_seq TEXT, " + \
                        "pre_mods TEXT," + \
-                       "seq_taxids VARCHAR(1000)" + \
+                       "seq_taxids VARCHAR(1000)," + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)
@@ -265,7 +265,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "pre_mods  TEXT, " + \
                        "recomm_seq TEXT, " + \
                        "recomm_mods  TEXT, " + \
-                       "seq_taxids VARCHAR(1000)" + \
+                       "seq_taxids VARCHAR(1000)," + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)
@@ -284,7 +284,7 @@ def upsert_score_psm_table(project_id,p_score_psm_list, n_score_psm_list, new_ps
                        "spectra LONGBLOB, " + \
                        "recomm_seq TEXT, " + \
                        "recomm_mods TEXT, " + \
-                       "seq_taxids VARCHAR(1000)" + \
+                       "seq_taxids VARCHAR(1000)," + \
                        "acceptance INTEGER" + \
                        ")"
     cursor.execute(drop_table_sql)

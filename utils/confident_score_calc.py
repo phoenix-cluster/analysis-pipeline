@@ -223,7 +223,7 @@ def calculate_conf_sc_for_a_cluster(cluster):
     # print("gonna to calculate conf_sc for %s, %d, %s, %f, %s"%(pep_seq, n_spec, seqs_ratios_str, ratio, lib_spec_id))
     cluster_id = cluster['id']
     ratio = cluster['ratio']
-    n_spec = cluster['size']
+    n_spec = int(cluster['size'])
     seqs_ratios_str = cluster['seqs_ratios']
 
     if n_spec > 1000:
@@ -281,7 +281,8 @@ def calculate_conf_sc_for_a_cluster(cluster):
         for other_ratio in other_ratios.values():
             sum_sqr_of_others += pow(other_ratio,2)
         sqrt_of_others = math.sqrt(sum_sqr_of_others)
-        confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+        # confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+        confidence_score = (0.9 + 0.1 * normalized_n_spec) * (this_ratio - sqrt_of_others)
         if this_ratio ==  0.5 and confidence_score == 0:  #
             confidence_score = - 0.1  #penalizing score -0.1 for (0.5 0.5)
         confidence_scores[seq] = confidence_score
@@ -295,7 +296,8 @@ def calculate_conf_sc_for_a_cluster(cluster):
     for other_ratio in il_ratios.values():
         sum_sqr_of_others += pow(other_ratio,2)
     sqrt_of_others = math.sqrt(sum_sqr_of_others)
-    confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+    # confidence_score = normalized_n_spec * (this_ratio - sqrt_of_others)
+    confidence_score = (0.9 + 0.1 * normalized_n_spec) * (this_ratio - sqrt_of_others)
     confidence_scores['_NonSEQ'] = confidence_score
 
     return (confidence_scores)

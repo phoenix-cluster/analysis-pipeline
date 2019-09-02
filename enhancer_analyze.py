@@ -51,7 +51,7 @@ def main():
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
 
-    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to calculate project: " + project_id)
 
     # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
@@ -75,7 +75,7 @@ def main():
 #    spec_file = project_id + "/" + project_id + "_spec.csv"
     spec_files = glob.glob(project_id + "/*_spec.csv")
     psm_files = glob.glob(project_id + "/*_psm.csv")
-    cluster_taxid_csv_path = "/data/6.20/testhbase/data/201504/taxids.csv"
+    cluster_taxid_csv_path = "/home/ubuntu/mingze/testhbase/data/201504/taxids.csv"
     logging.info("start to read identification from csv")
     print("start to read identification from csv")
     identified_spectra  = psm_util.read_identification_from_csv(psm_files)
@@ -88,7 +88,7 @@ def main():
 
     cluster_data = cluster_csv.read_csv('/home/ubuntu/mingze/spec_lib_searching/phospho/clusters_min5.csv')
     if cluster_data == None:
-        cluster_data = mysql_acc.get_cluster_data(lib_search_results)
+        cluster_data = mysql_acc.get_all_clusters()
 
     spec_match_detail_file = project_id + "/" + project_id + "_spec_match_details.csv"
     matched_spec_details_dict = psm_util.read_matched_spec_from_csv(spec_match_detail_file)
