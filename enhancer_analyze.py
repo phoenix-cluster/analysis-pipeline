@@ -28,6 +28,7 @@ import logging
 import time
 from docopt import docopt
 import glob
+import configparser
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
@@ -35,11 +36,13 @@ import retrieve_splib_result as retriever
 #import phoenix_import_util as phoenix
 import mysql_storage_access as mysql_acc
 import statistics_util as stat_util
-import utils.build_cluster_csv as cluster_csv
+import utils.build_cluster_csv as build_cluster_csv
 import utils.score_psms as score_psms
 import psm_util
 
 
+config = configparser.ConfigParser()
+config.read("%s/config.ini"%(file_dir))
 
 def main():
     arguments = docopt(__doc__, version='enhancer_analyze 0.0.1')
@@ -51,7 +54,7 @@ def main():
     if project_id == None:
         raise Exception("No project id inputed, failed to do the analysis.")
 
-    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename="%s_pipeline.log"%project_id, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     logging.info("Start to calculate project: " + project_id)
 
     # date = time.strftime("%Y%m%d") + "3" #date is for choose the tables which has date as suffix
@@ -61,7 +64,6 @@ def main():
 
     # retrive from spectraST search result files
     start = time.clock()
-    lib_search_results = None
     input_path = project_id + '/'
     sr_csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
     lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file) #retrieve the library search results and export them to file/mysql_acc db
@@ -75,7 +77,7 @@ def main():
 #    spec_file = project_id + "/" + project_id + "_spec.csv"
     spec_files = glob.glob(project_id + "/*_spec.csv")
     psm_files = glob.glob(project_id + "/*_psm.csv")
-    cluster_taxid_csv_path = "/home/ubuntu/mingze/testhbase/data/201504/taxids.csv"
+    cluster_taxid_csv_path = config.get("Files","cluster_taxid_csv")
     logging.info("start to read identification from csv")
     print("start to read identification from csv")
     identified_spectra  = psm_util.read_identification_from_csv(psm_files)
@@ -86,7 +88,8 @@ def main():
 
     mysql_acc.insert_spec_to_db_from_csv(project_id, spec_files) #specs also needs to be import because java pride xml importer don't import to phoenix any more
 
-    cluster_data = cluster_csv.read_csv('/home/ubuntu/mingze/spec_lib_searching/phospho/clusters_min5.csv')
+    cluster_data_csv = config.get("Files","cluster_csv_file")
+    cluster_data = build_cluster_csv.read_csv(cluster_data_csv)
     if cluster_data == None:
         cluster_data = mysql_acc.get_all_clusters()
 
@@ -116,8 +119,9 @@ def main():
     mysql_acc.create_project_ana_record_table()
     thresholds = stat_util.default_thresholds
     thresholds["cluster_size_threshold"] = min_cluster_size
-    (p_score_psm_list, n_score_psm_list, new_psm_list) = score_psms.build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict,cluster_taxid_csv_path)
+    (p_score_psm_list, n_score_psm_list, new_psm_list,taxid_statistics_dict) = score_psms.build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict,cluster_taxid_csv_path)
     mysql_acc.upsert_score_psm_table(project_id, p_score_psm_list, n_score_psm_list, new_psm_list)
+    mysql_acc.insert_taxid_statistics(project_id, taxid_statistics_dict,thresholds["min_seq_no_in_species_threshold"])
     elapsed = time.clock() - start
     logging.info("%s build score psm table takes time: %f"%(project_id, elapsed))
 

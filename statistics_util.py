@@ -19,8 +19,11 @@ default_thresholds = {
     "cluster_size_threshold": 10,
     "cluster_ratio_threshold": 0.5,
     "conf_sc_threshold": 0.1,
-    "spectrast_fval_threshold": 0.5
+    "spectrast_fval_threshold": 0.5,
+    "min_seq_no_in_species_threshold":10
 }
+
+
 
 
 

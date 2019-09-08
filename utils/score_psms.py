@@ -66,6 +66,12 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
     p_score_psm_list = list()
     n_score_psm_list = list()
     new_psm_list = list()
+
+
+    p_score_seq_taxid_dict = dict()
+    n_score_seq_taxid_dict = dict()
+    new_seq_taxid_dict = dict()
+
     for cluster_id in spectra_matched_to_cluster.keys():
         matched_spectra = spectra_matched_to_cluster.get(cluster_id, [])
         # logging.info("cluster %s matched to %d spec"%(cluster_id, len(matched_spectra)))
@@ -81,7 +87,7 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
         #get the taxid info for each cluster
         seq_taxid = cluster_taxid_map.get(cluster_id).replace("'", "\"")
         seq_taxid_map = json.loads(seq_taxid)
-
+        logging.debug("get taxids for %d clusters"%(len(seq_taxid_map)))
         for matched_spec in matched_spectra:
             spec_match = matched_spec_details_dict.get(matched_spec, None)
             pre_seq = spec_match.get('pre_seq')
@@ -103,6 +109,8 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
         n_id = 0
         n_id_in_p_score_list = 0
 
+
+
         for pep_seq_mods_str in matched_peptides.keys():
             pep_spectra = matched_peptides.get(pep_seq_mods_str, [])
             n_id += len(pep_spectra)
@@ -120,15 +128,47 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
             cluster_size = int(spec_match.get('cluster_size'))
             if conf_score > 0:
                 pre_seq_taxid = str(seq_taxid_map.get(pre_seq)).replace("'","")
+                logging.debug("get preseq_taxid %s for pre_seq %s"%(pre_seq_taxid, pre_seq))
                 p_score_psm_list.append((len(p_score_psm_list)+1, conf_score, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, pre_seq_taxid, 0))
                 # logging.info("add num_spec: %d" % num_spec)
                 n_id_in_p_score_list += num_spec
+
+                ###deal taxids ###
+                if pre_seq_taxid.lower() != 'none':
+                    seq_taxids = pre_seq_taxid[1:-1].replace(' ', '')  #remove the "[]" and the space
+                    seq_taxid_list = seq_taxids.split(",")
+                    logging.debug("p sc seq %s"%seq_taxid_list)
+                    for taxid in seq_taxid_list:
+                        if taxid == '' or taxid.lower() == 'none' or taxid.lower() == 'unknown':
+                            continue
+                        psm_no = p_score_seq_taxid_dict.get(taxid, 0)
+                        psm_no = psm_no + 1
+                        p_score_seq_taxid_dict[taxid] = psm_no
+                ###deal taxids ###
+
             if conf_score < 0:
                 recomm_seq = spec_match.get('recomm_seq')
+                recomm_seq = recomm_seq.replace("R_Better_", "")
                 recomm_mods = spec_match.get('recomm_mods')
                 recomm_seq_taxid = str(seq_taxid_map.get(recomm_seq)).replace("'","")
-                n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods, recomm_seq, recomm_mods, recomm_seq_taxid, 0))
+                logging.debug("get recommseq_taxid %s for recomm_seq %s"%(recomm_seq_taxid, recomm_seq))
+                n_score_psm_list.append((len(n_score_psm_list)+1, conf_score, recomm_seq_sc, cluster_id, cluster_ratio,
+                                         cluster_ratio_str, cluster_size, num_spec, spectra, pre_seq, pre_mods,
+                                         recomm_seq, recomm_mods, recomm_seq_taxid, 0))
 
+                ###deal taxids ###
+                if recomm_seq_taxid.lower() != 'none':
+                    seq_taxids = recomm_seq_taxid[1:-1].replace(' ', '')  #remove the "[]" and the space
+                    seq_taxid_list = seq_taxids.split(",")
+                    logging.debug("n sc seq %s"%seq_taxid_list)
+                    for taxid in seq_taxid_list:
+                        if taxid == '' or taxid.lower() == 'none' or taxid.lower() == 'unknown':
+                            continue
+                        logging.debug("n_score_seq_taxid_dict: %s"%n_score_seq_taxid_dict)
+                        psm_no = n_score_seq_taxid_dict.get(taxid, 0)
+                        psm_no = psm_no + 1
+                        n_score_seq_taxid_dict[taxid] = psm_no
+                ###deal taxids ###
         # logging.info("cluster %s matched to %d id spec in matched_peptides"%(cluster_id, n_id))
         # logging.info("%d spec in p_score_list"%(n_id_in_p_score_list))
         #group the recommend new psms for one cluster
@@ -141,12 +181,34 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
             cluster_ratio = float(spec_match.get('cluster_ratio'))
             cluster_size = int(spec_match.get('cluster_size'))
             recomm_seq = spec_match.get('recomm_seq')
+            recomm_seq = recomm_seq.replace("R_NEW_", "")
             recomm_mods = spec_match.get('recomm_mods')
             spectra = "||".join(matched_unid_spec)
 
             recomm_seq_taxid = str(seq_taxid_map.get(recomm_seq)).replace("'","")
+            ###deal taxids ###
+            if recomm_seq_taxid.lower() != 'none':
+                seq_taxids = recomm_seq_taxid[1:-1].replace(' ', '')  #remove the "[]" and the space
+                seq_taxid_list = seq_taxids.split(",")
+                logging.debug("new seq %s"%seq_taxid_list)
+                for taxid in seq_taxid_list:
+                     if taxid == '' or taxid.lower() == 'none' or taxid.lower() == 'unknown':
+                            continue
+                     psm_no = new_seq_taxid_dict.get(taxid, 0)
+                     psm_no = psm_no + 1
+                     new_seq_taxid_dict[taxid] = psm_no
+            ###deal taxids ###
+
+            logging.debug("get recommseq_taxid %s for recomm_seq %s"%(recomm_seq_taxid, recomm_seq))
             new_psm_list.append((len(new_psm_list)+1, recomm_seq_sc, cluster_id, cluster_ratio, cluster_ratio_str, cluster_size, num_spec, spectra, recomm_seq, recomm_mods, recomm_seq_taxid, 0))
 
+    taxid_statistics_dict = {
+        "negscore": n_score_seq_taxid_dict,
+        "posscore": p_score_seq_taxid_dict,
+        "newid": new_seq_taxid_dict,
+    }
 
-    return (p_score_psm_list, n_score_psm_list, new_psm_list)
+    logging.debug(taxid_statistics_dict)
+
+    return (p_score_psm_list, n_score_psm_list, new_psm_list, taxid_statistics_dict)
 

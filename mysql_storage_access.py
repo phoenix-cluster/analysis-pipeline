@@ -605,6 +605,33 @@ def insert_statistics_to_record(project_id, statistics_results):
     cursor.close()
     conn.close()
 
+#insert how the species distribution in each project
+def insert_taxid_statistics(project_id, taxid_statistics_dict, psm_no_threshold ):
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    temp_taxid_project_list = list()
+    for sc_type in taxid_statistics_dict.keys():
+        one_type_taxid_dict = taxid_statistics_dict.get(sc_type)
+        logging.debug("deal %s type, %d rows"%(sc_type, len(one_type_taxid_dict)))
+        for (taxid, psm_no) in one_type_taxid_dict.items():
+            if psm_no < psm_no_threshold:
+                continue
+        # cluster_taxid_map_in_project[row_id] = recomm_seq_taxid
+            temp_taxid_project_list.append((project_id, sc_type, taxid, psm_no))
+    update_sql = "insert into `T_TAXIDS_IN_PROJECT` (project_id, score_type, taxid, psm_no) values " + \
+                    "(%s, %s, %s, %s)"
+    logging.info("start to output the taxid statistics to mysql %s for %d rows"%(update_sql, len(temp_taxid_project_list)))
+    try:
+        cursor.executemany(update_sql, temp_taxid_project_list)
+        # cursor.execute(update_sql)
+    except Exception as e:
+        print("ERROR in executing sql: %s, info: %s"%(update_sql, e))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 def get_analysis_job(analysis_id):
     conn = get_conn()
     cursor = conn.cursor()
