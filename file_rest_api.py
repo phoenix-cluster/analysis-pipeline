@@ -16,6 +16,7 @@ config.read("%s/config.ini"%(file_dir))
 
 
 def after_request(response):
+  # response.headers.add('Access-Control-Allow-Origin', 'http://192.168.6.20:4201')
   response.headers.add('Access-Control-Allow-Origin', 'http://enhancer.ncpsb.org')
   # response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,undefined')
   response.headers.add('Access-Control-Allow-Headers', '*, undefined, accessionId, token, analysisId')

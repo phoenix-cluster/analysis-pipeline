@@ -4,10 +4,11 @@ import math
 import os, sys, re, json
 import logging
 
+file_dir = os.path.dirname(os.path.realpath(__file__))
+parent_path = os.path.abspath(os.path.join(file_dir, os.pardir))
+sys.path.append(file_dir)
+sys.path.append(parent_path)
 
-par_dir = os.path.abspath("..")
-print(par_dir)
-sys.path.append(par_dir)
 import mysql_storage_access as mysql_acc
 
 """

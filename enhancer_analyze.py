@@ -90,6 +90,7 @@ def main():
 
     cluster_data_csv = config.get("Files","cluster_csv_file")
     cluster_data = build_cluster_csv.read_csv(cluster_data_csv)
+    logging.info("read %d clusters from %s"%(len(cluster_data), cluster_data_csv))
     if cluster_data == None:
         cluster_data = mysql_acc.get_all_clusters()
 
