@@ -71,7 +71,7 @@ def get_row(projectid, filename, index, spectrum, data_type):
     :return:
     """
     spectrumTitle, precursorMz, precursorIntens, charge, seq, mods, peaklistMz, peaklistIntens = get_spec_info(spectrum, data_type)
-    spectrumTitle = "%s;%s;index=%d"%(projectid, filename, index) #biuld new title with the projectid;filename;index
+    spectrumTitle = "%s;%s;spectrum=%d"%(projectid, filename, index) #biuld new title with the projectid;filename;index
     peaklistMz = ",".join('%s' %id for id in peaklistMz)
     peaklistIntens = ",".join('%s' %id for id in peaklistIntens)
     spec_row = []

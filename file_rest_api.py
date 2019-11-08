@@ -16,8 +16,8 @@ config.read("%s/config.ini"%(file_dir))
 
 
 def after_request(response):
-  # response.headers.add('Access-Control-Allow-Origin', 'http://192.168.6.20:4201')
-  response.headers.add('Access-Control-Allow-Origin', 'http://enhancer.ncpsb.org')
+  ACCESS_CON_ALL_ORIGIN = config.get("Web", "Access-Control-Allow-Origin")
+  response.headers.add('Access-Control-Allow-Origin', ACCESS_CON_ALL_ORIGIN)
   # response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,undefined')
   response.headers.add('Access-Control-Allow-Headers', '*, undefined, accessionId, token, analysisId')
   # response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
@@ -127,7 +127,7 @@ class FileConfirm(Resource):
             for file_item in result_file_list.get("fileList"):
                 filename = file_item.get('fileName')
                 filetype = file_item.get('fileType')
-                f.write("%s\t\t%s"%(filename, filetype))
+                f.write("%s\t\t%s\n"%(filename, filetype))
 
 
     def post(self):
@@ -264,7 +264,7 @@ api.add_resource(Test, '/test')
 if __name__ == '__main__':
     host = config.get("Web", "host")
     port = config.get("Web", "port")
-    debug = config.get("Web", "debug")
+    debug = config.getboolean("Web", "debug")
 
     app.run(host=host, port=port, debug=debug)
     # DoAnalysis.do_analysis(DoAnalysis, analysis_id=54, min_cluster_size=10, user_email_add='bmze@qq.com', is_public=False)

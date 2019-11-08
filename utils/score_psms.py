@@ -79,8 +79,8 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
         matched_peptides = dict()
         #group the scored (previously identified) PSMs by peptide sequence(and modifications)
         #or group the scored (previously unidentified) PSMs by peptide sequence(and modifications)
-        if(cluster_id.startswith("50668639")):
-            logging.info(matched_spectra)
+        # if(cluster_id.startswith("50668639")):
+        #     logging.info(matched_spectra)
         n_id = 0
         n_unid = 0
 
@@ -88,6 +88,8 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
         seq_taxid = cluster_taxid_map.get(cluster_id).replace("'", "\"")
         seq_taxid_map = json.loads(seq_taxid)
         logging.debug("get taxids for %d clusters"%(len(seq_taxid_map)))
+
+        #pick the identified/unidentified spectra for one cluster
         for matched_spec in matched_spectra:
             spec_match = matched_spec_details_dict.get(matched_spec, None)
             pre_seq = spec_match.get('pre_seq')
@@ -105,12 +107,11 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
                 matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id, [])
                 matched_unid_spec.append(matched_spec)
                 unid_spec_matched_to_cluster[cluster_id] = matched_unid_spec
-        # logging.info("%d id, %d unid"%(n_id, n_unid))
+        # logging.info("matched %d identified spectra, %d unidentified spectra"%(n_id, n_unid))
         n_id = 0
         n_id_in_p_score_list = 0
 
-
-
+        #deal the identified spectra in the order of peptides
         for pep_seq_mods_str in matched_peptides.keys():
             pep_spectra = matched_peptides.get(pep_seq_mods_str, [])
             n_id += len(pep_spectra)
@@ -171,6 +172,7 @@ def build_score_psm_list(cluster_data, thresholds, matched_spec_details_dict, cl
                 ###deal taxids ###
         # logging.info("cluster %s matched to %d id spec in matched_peptides"%(cluster_id, n_id))
         # logging.info("%d spec in p_score_list"%(n_id_in_p_score_list))
+
         #group the recommend new psms for one cluster
         matched_unid_spec = unid_spec_matched_to_cluster.get(cluster_id)
         if matched_unid_spec != None and len(matched_unid_spec) > 0:

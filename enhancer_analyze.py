@@ -39,10 +39,28 @@ import statistics_util as stat_util
 import utils.build_cluster_csv as build_cluster_csv
 import utils.score_psms as score_psms
 import psm_util
+import analysis_pipeline
 
 
 config = configparser.ConfigParser()
 config.read("%s/config.ini"%(file_dir))
+
+
+def get_result_files(project_id):
+    result_files = analysis_pipeline.get_result_files(project_id)
+    for file in result_files:
+        if file.get('filename').endswith(".gz"):
+            file['filename'] = file.get('filename')[:-3]
+    return result_files
+
+
+def get_ms_runs_dict(result_files):
+    ms_runs_list = analysis_pipeline.get_ms_runs(result_files)
+    ms_runs_dict = {}
+    for ms_run in ms_runs_list:
+        ms_run_name = ms_run.get('name')
+        ms_runs_dict[ms_run_name] = ms_run
+    return ms_runs_dict
 
 def main():
     arguments = docopt(__doc__, version='enhancer_analyze 0.0.1')
@@ -62,11 +80,14 @@ def main():
     if arguments['--date']:
         date = arguments['--date']
 
+    result_files = get_result_files(project_id)
+    ms_runs_dict = get_ms_runs_dict(result_files)
+
     # retrive from spectraST search result files
     start = time.clock()
     input_path = project_id + '/'
     sr_csv_file = project_id + '/' + project_id + 'lib_search_result.csv'
-    lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file) #retrieve the library search results and export them to file/mysql_acc db
+    lib_search_results = retriever.retrive_search_result(project_id, input_path, sr_csv_file, ms_runs_dict) #retrieve the library search results and export them to file/mysql_acc db
 
     elapsed = time.clock() - start
     logging.info("%s retriving lib search results takes time: %f"%(project_id, elapsed))

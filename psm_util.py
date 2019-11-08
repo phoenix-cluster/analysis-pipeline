@@ -30,7 +30,7 @@ def build_matched_spec(search_results, identified_spectra, cluster_data):
         cluster_id = search_result.get('lib_spec_id')
         cluster = cluster_data.get(cluster_id)
         if cluster == None:
-            logging.info("Null cluster for: %s"%(cluster_id))
+            logging.debug("Null cluster for: %s, which may small than 5"%(cluster_id))
             continue
         cluster_ratio = float(cluster.get('ratio'))
         cluster_size = int(cluster.get('size'))

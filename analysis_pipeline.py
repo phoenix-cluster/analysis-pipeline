@@ -104,6 +104,9 @@ def add_peak_file(project_id, ms_runs):
 
         if psmfiletype == "pridexml" or psmfiletype == "mgf":#peaknpsm file type
             peakfile = ms_run['name'] + ".mgf"
+            if os.path.exists(project_id + os.sep + ms_run['name'] + ".MGF"):
+                peakfile = ms_run['name'] + ".MGF"
+
 
         #if no same name peak file found, and not psmnpeak file, retrieve peak file name from mzid file
         if peakfile == "" and psmfiletype == "mzid":
@@ -142,9 +145,9 @@ def get_ms_runs(result_files):
         elif filename.lower().endswith(".mzid.gz"):
             ms_run_name = filename[:-8]
             psmfiletype= "mzid"
-        elif filename.lower().endswith(".mztab.gz"):
-            ms_run_name = filename[:-9]
-            psmfiletype= "mztab"
+        # elif filename.lower().endswith(".mztab.gz"):
+        #     ms_run_name = filename[:-9]
+        #     psmfiletype= "mztab"
         elif filename.lower().endswith(".xml") :
             ms_run_name = filename[:-4]
             psmfiletype= "pridexml"
@@ -154,12 +157,27 @@ def get_ms_runs(result_files):
         elif filename.lower().endswith(".mzid"):
             ms_run_name = filename[:-5]
             psmfiletype= "mzid"
-        elif filename.lower().endswith(".mztab"):
-            ms_run_name = filename[:-6]
-            psmfiletype= "mztab"
+        # elif filename.lower().endswith(".mztab"):
+        #     ms_run_name = filename[:-6]
+        #     psmfiletype= "mztab"
         else:
             raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz or .mzid/.mztab or .mzid.gz/.mztab.gz" % (file))
-        ms_runs.append({"name":ms_run_name, "psmfiletype":psmfiletype, "filetype":filetype, "filename":filename})
+
+        this_peakfile = ''
+        if filetype == 'psm':
+            for result_file in result_files:
+                result_filename = result_file.get('filename')
+                if result_filename == ms_run_name + '.mgf' or result_filename == ms_run_name + '.MGF' \
+                        or result_filename == ms_run_name + '.mzML':
+                    this_peakfile = result_filename
+                    break
+            if this_peakfile == '':
+                print("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
+                logging.error("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
+
+        ms_runs.append({"name":ms_run_name, "psmfiletype":psmfiletype,
+                        "peakfile":this_peakfile,
+                        "filetype":filetype, "filename":filename})
 
     if len(ms_runs) < 1:
         raise Exception("There is no psm files in the file list")
@@ -248,9 +266,7 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
         f.write(cd_shell_path)
         temp_n_parallel_jobs = int(parallel_jobs/2)
         temp_index = temp_n_parallel_jobs
-        print(ms_runs)
         for ms_run in ms_runs:
-            print("msrun %s" % ms_run.get("name"))
             f.write("rm %s_psm.csv \n" % (ms_run.get("name")))
             f.write("rm %s_spec.csv \n" % (ms_run.get("name")))
             psmfiletype =ms_run.get("psmfiletype")
@@ -273,9 +289,9 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
                     f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, ';'))
                 if psmfiletype == "mzid":
                     f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, ';'))
-                    if peakfile.endswith(".mgf"):
+                    if peakfile.lower().endswith(".mgf"):
                         f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, ';'))
-                    elif peakfile.endswith((".mzML")):
+                    elif peakfile.lower().endswith((".mzml")):
                         f.write(mzml_peak_command_str %(mzml_converter, project_id, peakfile, ';'))
             else:
                 if psmfiletype == "pridexml":
@@ -284,11 +300,12 @@ def create_load_psms_peaks_to_csv_shell_files(project_id, ms_runs):
                     f.write(mgf_peak_psm_command_str %(mgf_converter, project_id, filename, '&'))
                 if psmfiletype == "mzid":
                     f.write(mzid_command_str %(mzid_converter, project_id, filename, peakfile_option, '&'))
-                    if peakfile.endswith(".mgf"):
+                    if peakfile.lower().endswith(".mgf"):
                         f.write(mgf_peak_command_str %(mgf_converter, project_id, peakfile, '&'))
-                    elif peakfile.endswith((".mzML")):
+                    elif peakfile.lower().endswith((".mzml")):
                         f.write(mzml_peak_command_str %(mzml_converter, project_id, peakfile, '&'))
 
+        logging.info("done with creating load_psms_peaks_to_csv.sh")
         print("done with creating load_psms_peaks_to_csv.sh")
 
 def create_convert_shell_files(project_id, ms_runs):

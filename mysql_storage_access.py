@@ -24,7 +24,12 @@ def get_conn():
     user = database_para.get("user")
     passwd = database_para.get("passwd")
     db = database_para.get("db")
-    autocommit = database_para.get("autocommit")
+    logging.info("connecting to database by: ")
+    logging.info(host)
+    logging.info(port)
+    logging.info(user)
+    logging.info(db)
+    autocommit = database_para.getboolean("autocommit")
     local_infile = database_para.get("local_infile")
     conn = pymysql.connect(host = host, port=int(port),
                            user=user,
@@ -210,6 +215,9 @@ def upsert_matched_spec_table(project_id, matched_spec_details):
 
     upsert_data = matched_spec_details
 
+    if upsert_data == None or len(upsert_data) <= 0:
+        logging.warning("No matched spectra is going to be imported")
+        return
 
 #    upsert_sql = "replace into " + match_table_name + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     upsert_sql = "INSERT INTO " + match_table_name.upper() + " (spec_title,dot,f_val,cluster_id,cluster_size,cluster_ratio,pre_seq,pre_mods, recomm_seq, recomm_mods, conf_sc, recomm_seq_sc)" + \
@@ -571,14 +579,32 @@ def insert_thresholds_to_record(project_id, thresholds):
     conn = get_conn()
     cursor = conn.cursor()
     project_ana_record_table_name = "T_project_analysis_result".upper()
-    upsert_sql = "update " + project_ana_record_table_name + " set " + \
-        "cluster_ratio_threshold=%f, cluster_size_threshold=%f, conf_sc_threshold=%f, spectrast_fval_threshold=%f where project_id= '%s'" % (
-        thresholds.get('cluster_ratio_threshold'),
-        thresholds.get('cluster_size_threshold'),
-        thresholds.get('conf_sc_threshold'),
-        thresholds.get('spectrast_fval_threshold'),
-        project_id
-    )
+
+
+    select_sql = "select count(*) from  " + project_ana_record_table_name + " where project_id='%s' " %(project_id)
+    cursor.execute(select_sql)
+    (result,) = cursor.fetchone()
+    if int(result) == 1:
+        upsert_sql = "update " + project_ana_record_table_name + " set " + \
+            "cluster_ratio_threshold=%f, cluster_size_threshold=%f, conf_sc_threshold=%f, spectrast_fval_threshold=%f where project_id= '%s'" % (
+            thresholds.get('cluster_ratio_threshold'),
+            thresholds.get('cluster_size_threshold'),
+            thresholds.get('conf_sc_threshold'),
+            thresholds.get('spectrast_fval_threshold'),
+            project_id
+        )
+    else:
+        upsert_sql = "insert into " + project_ana_record_table_name + " ( " + \
+            "project_id, cluster_ratio_threshold, cluster_size_threshold, conf_sc_threshold, spectrast_fval_threshold ) " +\
+            "values ('%s', %f, %f, %f, %f)" %(
+            project_id,
+            thresholds.get('cluster_ratio_threshold'),
+            thresholds.get('cluster_size_threshold'),
+            thresholds.get('conf_sc_threshold'),
+            thresholds.get('spectrast_fval_threshold')
+                     )
+
+    print(upsert_sql)
     cursor.execute(upsert_sql)
     cursor.close()
     conn.close()
@@ -587,18 +613,42 @@ def insert_statistics_to_record(project_id, statistics_results):
     conn = get_conn()
     cursor = conn.cursor()
     project_ana_record_table_name = "T_project_analysis_result".upper()
-    upsert_sql = "update " + project_ana_record_table_name + " set " +\
-        "prePSM_no=%d, prePSM_not_matched_no=%d, prePSM_high_conf_no=%d, prePSM_low_conf_no=%d, better_PSM_no=%d, new_PSM_no=%d, matched_spec_no=%d, matched_id_spec_no=%d where project_id='%s'"%(
-        statistics_results['prePSM_no'],
-        statistics_results['prePSM_not_matched_no'],
-        statistics_results['prePSM_high_conf_no'],
-        statistics_results['prePSM_low_conf_no'],
-        statistics_results['better_PSM_no'],
-        statistics_results['new_PSM_no'],
-        statistics_results['matched_spec_no'],
-        statistics_results['matched_id_spec_no'],
-        project_id
-        )
+
+
+    select_sql = "select count(*) from  " + project_ana_record_table_name + " where project_id= '%s' " %(project_id)
+    print(select_sql)
+    cursor.execute(select_sql)
+    (result,) = cursor.fetchone()
+    print(result)
+    if int(result) == 1:
+        upsert_sql = "update " + project_ana_record_table_name + " set " +\
+            "prePSM_no=%d, prePSM_not_matched_no=%d, prePSM_high_conf_no=%d, prePSM_low_conf_no=%d, better_PSM_no=%d, new_PSM_no=%d, matched_spec_no=%d, matched_id_spec_no=%d where project_id='%s'"\
+            %(
+            statistics_results['prePSM_no'],
+            statistics_results['prePSM_not_matched_no'],
+            statistics_results['prePSM_high_conf_no'],
+            statistics_results['prePSM_low_conf_no'],
+            statistics_results['better_PSM_no'],
+            statistics_results['new_PSM_no'],
+            statistics_results['matched_spec_no'],
+            statistics_results['matched_id_spec_no'],
+            project_id
+            )
+    else:
+        upsert_sql = "insert into " + project_ana_record_table_name + " (" +\
+            "project_id, prePSM_no, prePSM_not_matched_no, prePSM_high_conf_no," +\
+            "prePSM_low_conf_no, better_PSM_no, new_PSM_no, matched_spec_no, matched_id_spec_no" +\
+            ") values ('%s', %d,%d,%d,%d,%d,%d,%d,%d)"%(
+            project_id,
+            statistics_results['prePSM_no'],
+            statistics_results['prePSM_not_matched_no'],
+            statistics_results['prePSM_high_conf_no'],
+            statistics_results['prePSM_low_conf_no'],
+            statistics_results['better_PSM_no'],
+            statistics_results['new_PSM_no'],
+            statistics_results['matched_spec_no'],
+            statistics_results['matched_id_spec_no']
+            )
     cursor.execute(upsert_sql)
     logging.info("Done with sql: %s"%(upsert_sql))
     conn.commit()

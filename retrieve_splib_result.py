@@ -7,7 +7,7 @@ The library is built from the PRIDE Cluster consensus spectra without identified
 """
 import os,sys
 import xml.etree.ElementTree as ET
-import csv
+import csv,re
 import logging
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
@@ -23,12 +23,20 @@ def get_lib_spec_id(protein_str):
     return words[1]
 
 def remove_pepxml_ext(path_name):
-    return path_name[:-7]
+    return path_name[:-8]
+
+
+def build_spec_title(project_id, ms_run, index, value):
+    enhancer_title = value
+    if re.match(r'E\d{6}', project_id):
+        enhancer_title = "%s;%s;spectrum=%s"%(project_id, ms_run.get('filename'), index)
+    return enhancer_title
+
 
 """
 build the map from spectrum index(in mzML) to spectrum title
 """
-def get_spec_title(mzML_path):
+def get_spec_title(project_id, ms_run, mzML_path):
     mzMLfile = open(mzML_path)
     ns_str = "{http://psi.hupo.org/ms/mzml}"
     tree = ET.parse(mzMLfile)
@@ -40,7 +48,8 @@ def get_spec_title(mzML_path):
             name = cvParam.attrib.get('name')
             if name == 'spectrum title':
                 id_value = cvParam.attrib.get('value')
-                id_map[index] = id_value
+                enhancer_title = build_spec_title(project_id,ms_run,index,id_value)
+                id_map[index] = enhancer_title
                 if id_value == None:
                     raise("Spectrum index" + index + " has empty spectrum title")
     mzMLfile.close()
@@ -115,11 +124,10 @@ def table_is_equal_to_csv(project_id, search_result_details):
 """
 retrive the search results
 """
-def retrieve_file(project_id, pepxml_path, title_map):
+def retrieve_file(pepxml_path, title_map):
     ns_str = "{http://regis-web.systemsbiology.net/pepXML}"
     tree = ET.parse(pepxml_path)
     root = tree.getroot()
-
     logging.info("Starting to retrieve" + pepxml_path)
     msms_run_summary = root[0]
     count = 0
@@ -153,7 +161,7 @@ def retrieve_file(project_id, pepxml_path, title_map):
                 score_value = search_score.attrib.get('value')
                 search_scores[score_name] = score_value 
         search_results[spectrum] = search_scores
-        
+
     logging.info("Retrieving of " + pepxml_path + " is done.")
     logging.info("Totally " + str(count) + "spectra have been imported from this file.")
     return search_results
@@ -165,12 +173,31 @@ def write_head_to_file(output_file):
     with open(output_file, 'w') as o:
         o.write("%s\t%s\t%s\t%s\n"%('spec_title', 'spec_in_lib', 'dot', 'fval'))
 
+"""
+retrieve the spec_cluster match results and persist them into the tab file
+by a pep.xml file
+"""
+def deal_a_file(project_id, file_path, file_name, ms_runs):
+    ms_run_name = remove_pepxml_ext(file_name)
+    directory_path = os.path.dirname(file_path)
+    ms_run = ms_runs.get(ms_run_name)
+    mzML_path = os.path.join(directory_path, ms_run_name + ".mzML")
+    search_results_of_file = list()
+
+    title_map = get_spec_title(project_id, ms_run, mzML_path)
+    try:
+        search_results_of_file = retrieve_file(os.path.join(file_path, file_name), title_map)
+    except Exception as error:
+        logging.info("error in retrive search result file in %s"%(error))
+    logging.info("retrived %d search result from .pep.xml file"%(len(search_results_of_file)))
+    return search_results_of_file
+
 
 
 """
 retrieve the spec_cluster match results and persist them into the tab file
 """
-def retrive_search_result(project_id, input_path, csv_file):
+def retrive_search_result(project_id, file_path, csv_file, ms_runs):
 
     logging.info("start to process the spec_cluster match results, persisit them to phoenix_db and file(?)")
     search_results = {}
@@ -179,29 +206,19 @@ def retrive_search_result(project_id, input_path, csv_file):
     if os.path.exists(csv_file) and os.path.getsize(csv_file) > 1:
         search_results = read_csv(csv_file, fieldnames)
         logging.info("read %d search result from csv file:%s "%(len(search_results), csv_file))
-
     else:
-        if os.path.isfile(input_path):
-            mzML_path = remove_pepxml_ext(input_path) + "mzML"
-            title_map = get_spec_title(mzML_path)
-            try:
-                search_results_of_file = retrieve_file(project_id, input_path, title_map)
-                search_results.update(search_results_of_file)
-            except Exception as error:
-                logging.info("error in retrive search result file in %s"%(error))
-            logging.info("retrived %d search result from .pep.xml files"%(len(search_results)))
+        if os.path.isfile(file_path):
+            file_name = file_path
+            search_results_of_file = deal_a_file(project_id, file_path, file_name, ms_runs)
+            search_results.update(search_results_of_file)
         else:
-            for file in os.listdir(input_path):
+            for file in os.listdir(file_path):
                 if not file.lower().endswith('.pep.xml'):
                     continue
-                mzML_path = input_path + "/" + remove_pepxml_ext(file) + "mzML"
-                title_map = get_spec_title(mzML_path)
-                try:
-                    search_results_of_file = retrieve_file(project_id, input_path + "/" + file, title_map)
-                    search_results.update(search_results_of_file)
-                except Exception as error:
-                    logging.info("error in retrive search result file in %s"%(error))
+                search_results_of_file = deal_a_file(project_id, file_path, file, ms_runs)
+                search_results.update(search_results_of_file)
             logging.info("retrived %d search result from .pep.xml files"%(len(search_results)))
+            print("retrived %d search result from .pep.xml files"%(len(search_results)))
 
         if len(search_results) > 0:
             write_to_csv(search_results, csv_file, fieldnames)
@@ -209,7 +226,7 @@ def retrive_search_result(project_id, input_path, csv_file):
 
 # def main():
 #     arguments = docopt(__doc__, version='retrieve_splib_result.py 1.0 BETA')
-#     input_path = arguments['--input'] or arguments['-i']
+#     file_path = arguments['--input'] or arguments['-i']
 #
 #     table_name = "test_spec_lib_search_result_1"
 #
@@ -217,7 +234,7 @@ def retrive_search_result(project_id, input_path, csv_file):
 #     if arguments['--output']:
 #         output_file = arguments['--output']
 #
-#     process(project_id, input_path, output_file)
+#     process(project_id, file_path, output_file)
 #
 #
 # if __name__ == "__main__":

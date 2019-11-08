@@ -67,13 +67,18 @@ def main():
     arguments = docopt(__doc__, version='mzid2csv 0.0.1')
     mzid_file = arguments.get('--input') or arguments['-i']
     projectid = arguments.get('--projectid') or arguments['-p']
-    peak_file = arguments['--peakfile']
+    peak_file = arguments.get('--peakfile', None)
     score_field = arguments.get('score_field', None)
     out_path = arguments.get('--output', None)
+
     if not out_path:
         out_path = arguments.get('-o', '.')
     if not score_field or not peak_file:
-        (score_field, peak_file) = mzident_reader.get_scfield_peakfile(mzid_file)
+        (tmp_score_field, tmp_peak_file) = mzident_reader.get_scfield_peakfile(mzid_file)
+        if not score_field:
+            score_field = tmp_score_field
+        if not peak_file:
+            peak_file = tmp_peak_file
     outfile = os.path.join(out_path, os.path.splitext(mzid_file)[0]+"_psm.csv")
 
     if not os.path.exists(peak_file):

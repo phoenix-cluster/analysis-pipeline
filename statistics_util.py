@@ -16,7 +16,7 @@ set thresholds for each project, by recreating the view
 """
 
 default_thresholds = {
-    "cluster_size_threshold": 10,
+    "cluster_size_threshold": 5,
     "cluster_ratio_threshold": 0.5,
     "conf_sc_threshold": 0.1,
     "spectrast_fval_threshold": 0.5,

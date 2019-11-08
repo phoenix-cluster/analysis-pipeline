@@ -11,7 +11,7 @@ from pathlib import Path
 # except ImportError:
 #     import xml.etree.ElementTree as ET
 import re
-# from requests import structures as structures
+from requests import structures as structures
 
 def get_scfield_peakfile(filename):
     """
@@ -42,14 +42,14 @@ def get_scfield_peakfile(filename):
         for subelem in list(id_elem):
             spec_ident_all_attrib += str(subelem.attrib).lower()
         for temp_field in score_fields:
-            if score_field.lower() in spec_ident_all_attrib:
+            if temp_field.lower() in spec_ident_all_attrib:
                 score_field = temp_field
                 break
         if score_field == "":
             raise Exception("Failed to find score field in mzIdentML file.")
         else:
+            print("Find score field %s in meIdentML file %s"%(score_field, filename))
             break
-
     print("start to get peak files")
     #get peak files
     peak_files = list()
@@ -59,7 +59,6 @@ def get_scfield_peakfile(filename):
         norm_peak_file_path =  os.path.normpath(location)
         norm_peak_file_path = norm_peak_file_path.replace('\\', os.sep)
         peak_file_name = os.path.basename(norm_peak_file_path)
-        print(peak_file_name)
         peak_files.append(peak_file_name)
     if len(peak_files)> 1:
         raise Exception("MzIdentML file %s has multiple peak files: %s, %s..."%(filename, peak_files[0], peak_files[1]))
@@ -373,7 +372,7 @@ def parser_mzident2(filename, score_field, title_field=None,
             spec_ident_all_attrib = ""
             for subelem in list(spec_ident):
                 spec_ident_all_attrib += str(subelem.attrib).lower()
-
+            print(score_field)
             if score_field.lower() not in spec_ident_all_attrib:
                 raise Exception("Failed to find supplied score field '" + score_field +
                                 "' in mzIdentML file.")
