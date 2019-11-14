@@ -10,11 +10,18 @@ RUN apt-get update \
   && cd /usr/local/bin \
   && pip3 install --upgrade pip
 
+################# switch the user ##################
+#USER biodocker
 ################# copy the code ####################
-COPY . /code
+#COPY ./*.py /code/
+#COPY ./*.ini /code/
+#COPY ./utils /code/
+#COPY ./venv /code/
 
 ################# run the code #####################
-USER biodocker
 WORKDIR /code
-CMD ["cp", "config_docker.ini", "config.ini"]
-CMD ["python3", "file_rest_api.py"]
+#CMD ["cp", "config_docker.ini", "config.ini"]
+#CMD ["mkdir", "../data"]
+#CMD ["mv", "data/lib", "../data/."]
+#CMD ["/bin/bash"]
+#CMD ["python3", "file_rest_api.py"]

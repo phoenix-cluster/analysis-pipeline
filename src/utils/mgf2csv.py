@@ -24,7 +24,23 @@ import csv
 from pyteomics import mgf
 from docopt import docopt
 import os
+import logging
 
+"""
+get integer charge from string, by removing '+' in the beginning or end
+"""
+def deal_charge_int(charge_str):
+    charge = 0
+    if charge_str.startswith('+'):
+        charge_str = charge_str[:1]
+    elif charge_str.endswith('+'):
+        charge_str = charge_str[:-1]
+    try:
+        charge = int(charge_str)
+    except Exception as e:
+        logging.error("Wrong charge, %s is not like '+1' or '1+' or '1' " %(charge_str))
+        logging.error(e)
+    return charge
 
 def get_spec_info(spectrum, data_type):
     """
