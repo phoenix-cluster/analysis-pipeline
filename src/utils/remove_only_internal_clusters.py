@@ -1,7 +1,9 @@
+
+import sys
+# sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import pandas as  pd
 import numpy as np
 import glob as glob
-import sys
 
 """
 This program remove the spec archive searchi results, which are map to the clusters only have spectra from same projects.

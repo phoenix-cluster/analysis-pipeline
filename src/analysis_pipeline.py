@@ -17,6 +17,7 @@ Options:
 
 import sys
 import os
+#sys.path.insert(0, "/code/py-venv/lib/python3.6/site-packages")
 from docopt import docopt
 import urllib.request
 import json

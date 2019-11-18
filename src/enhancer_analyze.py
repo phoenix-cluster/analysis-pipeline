@@ -24,6 +24,8 @@ Options:
 
 
 import sys, os
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
+#sys.path.insert(0, "/code/py-venv/lib/python3.6/site-packages")
 import logging
 import time
 from docopt import docopt
@@ -110,10 +112,12 @@ def main():
     mysql_acc.insert_spec_to_db_from_csv(project_id, spec_files) #specs also needs to be import because java pride xml importer don't import to phoenix any more
 
     cluster_data_csv = config.get("Files","cluster_csv_file")
-    cluster_data = build_cluster_csv.read_csv(cluster_data_csv)
-    logging.info("read %d clusters from %s"%(len(cluster_data), cluster_data_csv))
-    if cluster_data == None:
-        cluster_data = mysql_acc.get_all_clusters()
+    cluster_table_name = config.get("Database", "cluster_table")
+    cluster_data = build_cluster_csv.read_csv(cluster_data_csv, cluster_table_name)
+    if cluster_data != None:
+        logging.info("read %d clusters from %s"%(len(cluster_data), cluster_data_csv))
+    # if cluster_data == None:
+    #     cluster_data = mysql_acc.get_all_clusters()
 
     spec_match_detail_file = project_id + "/" + project_id + "_spec_match_details.csv"
     matched_spec_details_dict = psm_util.read_matched_spec_from_csv(spec_match_detail_file)

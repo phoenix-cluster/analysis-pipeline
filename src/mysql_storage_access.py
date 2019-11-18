@@ -1,6 +1,8 @@
+
+import os, sys, json
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import pymysql
 import time
-import os, sys, json
 import logging
 import configparser
 

@@ -1,4 +1,6 @@
 
+import sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import logging
 import json, csv
 

@@ -31,6 +31,9 @@ Options:
 
 import sys
 import os
+
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
+
 import glob
 from docopt import docopt
     

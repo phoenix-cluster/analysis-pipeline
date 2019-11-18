@@ -29,14 +29,27 @@ def write_to_csv(cluster_data, output_file, fieldnames):
             w.writerow(row)
 
 
+def from_mysql_to_csv(csv_file, cluster_table):
+    fieldnames = [
+        'id',
+        'ratio',
+        'size',
+        'seqs_ratios',
+        'conf_sc',
+        'seqs_mods',
+    ]
+    # cluster_data = phoenix.get_all_clusters(host, cluster_table, 5)
+    cluster_data = mysql_acc.get_all_clusters(cluster_table, 5)
+    write_to_csv(cluster_data, csv_file, fieldnames)
+    return cluster_data
+
+
 """
 #read the cluster library from csv file
 """
-
-
-def read_csv(csv_file):
+def read_csv(csv_file, cluster_table_name):
     if not os.path.exists(csv_file) or os.path.getsize(csv_file) < 1:
-        return None
+        return from_mysql_to_csv(csv_file, cluster_table_name)
     with open(csv_file, 'r') as f:
         new_dict = dict()
         reader = csv.reader(f, delimiter=',')

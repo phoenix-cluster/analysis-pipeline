@@ -6,6 +6,7 @@ The library is built from the PRIDE Cluster consensus spectra without identified
 
 """
 import os,sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import xml.etree.ElementTree as ET
 import csv,re
 import logging

@@ -35,11 +35,13 @@ Options:
 
 
 import sys, os
+# sys.path.insert(0, "../py-venv/lib/python3.6/site-packages")
+# sys.path.insert(0, "/code/py-venv/lib/python3.6/site-packages")
+from pyteomics import mgf
 import logging
 import time
 from docopt import docopt
 import csv
-import sys, os
 
 parent_path = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, parent_path)

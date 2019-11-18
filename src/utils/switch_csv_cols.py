@@ -15,9 +15,10 @@ Options:
 order_inLetters: CBA(invert), DEBAC,...
 
 """
+import os, sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import pandas as pd
 from docopt import docopt
-import os
 
 arguments = docopt(__doc__, version='switch_csv_cols v 0.0.1')
 csv_file = arguments['--csv'] or arguments['-c']

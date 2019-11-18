@@ -1,6 +1,8 @@
+
+import os,sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import pymysql.cursors
 import urllib3
-import os,sys
 
 """
 This program get the phospho projects which are also in 201504 PRIDE Cluster.

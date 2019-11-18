@@ -5,6 +5,7 @@ This analyser import clusters from a .clustering file
 import operator
 # import phoenixdb
 import os,sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 import re
 import traceback
 import pymysql.cursors

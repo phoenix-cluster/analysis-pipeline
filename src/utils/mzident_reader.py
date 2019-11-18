@@ -1,10 +1,15 @@
 # from docopt import docopt
 # import sys
 # import csv
+import os,sys
+#sys.path.insert(0, "../py-venv/lib/python3.6/site-packages")
 import operator
-import os
 # import ntpath
+# import lxml
+# etree = lxml.html.etree
+# print(lxml)
 from lxml import etree
+
 from pathlib import Path
 # try:
 #     import xml.etree.cElementTree as ET

@@ -19,9 +19,10 @@ Example
     mzml2csv.py -p PXD003452 -i test_old.mzml
 """
 
+import csv, os, sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 from docopt import docopt
 import pymzml
-import csv, os
 
 
 def get_row(projectid, filename, index, spectrum):

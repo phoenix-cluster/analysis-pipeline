@@ -1,5 +1,5 @@
 import os, sys, time
-sys.path.insert(0, "./venv/lib/python3.4/site-packages")
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 
 from flask import Flask, request
 from flask_restful import reqparse, abort, Api, Resource
@@ -177,12 +177,12 @@ class DoAnalysis(Resource):
                 print("The analysis job %06d has been started"%(analysis_id))
                 return "The analysis job %06d has been started"%(analysis_id)
             accessionId = "E%06d"%(analysis_id)
-            python_path = "/usr/bin/python3 "
-            pipeline_path = "/home/ubuntu/mingze/tools/spectra-library-analysis/analysis_pipeline.py "
-            parameter_accession_id = "-p " + accessionId + " "
-            parameter_cluster_size = "-s %d " % min_cluster_size
-            parameter_quiet = "-t y "
-            command_line = python_path + pipeline_path + parameter_accession_id + parameter_cluster_size + parameter_quiet
+            # python_path = "/usr/bin/python3 "
+            python_path = config.get("PipeLine", "python_path")
+            pipeline_path = config.get("PipeLine", "pipeline_path")
+            parameter_accession_id = " -p " + accessionId + " "
+            parameter_cluster_size = " -s %d " % min_cluster_size + " "
+            parameter_quiet = " -t y "
 
         # this part is used to test_old if the invoke are working fine or not
         #     command_line = "/usr/bin/python3 /tmp/test_old.py"
@@ -204,7 +204,7 @@ class DoAnalysis(Resource):
                 print("file:" + os.path.abspath(result_file))
                 return "The analysis job " + accessionId + " is going wrong"
 
-            command_line = python_path + pipeline_path + parameter_accession_id + parameter_cluster_size + parameter_quiet
+            command_line = python_path + " " + pipeline_path + parameter_accession_id + parameter_cluster_size + parameter_quiet
             print("start to execute " + command_line)
             os.chdir(working_dir)
             output = os.popen(command_line).readlines()

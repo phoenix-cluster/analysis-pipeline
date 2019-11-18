@@ -5,3 +5,4 @@ docker container rm enhancer_pipeline_container
 docker image rm phoenixenhancer/enhancer-pipeline
 
 docker build  --network=host -t  phoenixenhancer/enhancer-pipeline .
+#docker build   -t  phoenixenhancer/enhancer-pipeline .

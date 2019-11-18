@@ -21,9 +21,11 @@ Example
 """
 
 import csv
+import os,sys
+#sys.path.insert(0, "../py-venv/lib/python3.6/site-packages")
+#sys.path.insert(0, "/code/py-venv/lib/python3.6/site-packages")
 from pyteomics import mgf
 from docopt import docopt
-import os
 import logging
 
 """
@@ -31,9 +33,7 @@ get integer charge from string, by removing '+' in the beginning or end
 """
 def deal_charge_int(charge_str):
     charge = 0
-    if charge_str.startswith('+'):
-        charge_str = charge_str[:1]
-    elif charge_str.endswith('+'):
+    if charge_str.endswith('+'):
         charge_str = charge_str[:-1]
     try:
         charge = int(charge_str)
@@ -58,7 +58,7 @@ def get_spec_info(spectrum, data_type):
     #     precursorIntens = params.get(list(params)[2])
     # else :
     precursorIntens = "0"
-    charge = params.get('charge')
+    charge = deal_charge_int(str(params.get('charge')))
     peaklistMz = spectrum.get('m/z array')
     peaklistIntens = spectrum.get('intensity array')
     if data_type == "peak_psm":

@@ -13,8 +13,9 @@ Options:
 """
 
 
-import csv,pymysql,pandas
 import os,sys,time
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
+import csv,pymysql,pandas
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
 parent_dir = os.path.dirname(__file__) + "/.."

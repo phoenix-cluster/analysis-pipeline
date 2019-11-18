@@ -11,10 +11,11 @@ Options:
 -v, --version                        Print the current version.
 """
 
+import os,sys
+#sys.path.insert(0, "./py-venv/lib/python3.6/site-packages")
 from docopt import docopt
 import csv
 import pandas as pd
-import os
 
 
 def filster_down(projectid, filtered_cluster_id_file):
