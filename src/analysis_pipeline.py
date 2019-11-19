@@ -103,7 +103,10 @@ def add_peak_file(project_id, ms_runs):
         elif os.path.exists(ms_run['name'] + ".mzML"):
             peakfile = ms_run['name'] + ".mzML"
 
-        if psmfiletype == "pridexml" or psmfiletype == "mgf":#peaknpsm file type
+        if psmfiletype == "pridexml" :  #use same file name
+            peakfile = ms_run['filename']
+
+        if psmfiletype == "mgf":#peaknpsm file type
             peakfile = ms_run['name'] + ".mgf"
             if os.path.exists(project_id + os.sep + ms_run['name'] + ".MGF"):
                 peakfile = ms_run['name'] + ".MGF"
@@ -472,3 +475,5 @@ def main():
         mysql_acc.upsert_analysis_status(project_id, 'finished_with_error')
 if __name__ == "__main__":
     main()
+
+

@@ -30,7 +30,7 @@ def remove_pepxml_ext(path_name):
 def build_spec_title(project_id, ms_run, index, value):
     enhancer_title = value
     if re.match(r'E\d{6}', project_id):
-        enhancer_title = "%s;%s;spectrum=%s"%(project_id, ms_run.get('filename'), index)
+        enhancer_title = "%s;%s;spectrum=%s"%(project_id, ms_run.get('peakfile'), index)
     return enhancer_title
 
 
