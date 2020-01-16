@@ -35,8 +35,8 @@ class ClusterMySqlImporter(common.AbstractAnalyser):
         self.min_size = 2 # set default minium size 2
         self.type_to_import = ['a'] #import all types(cluster, spectrum, project) by default
         self.file_index = 0
-        self.mysql_host = "192.168.6.57"
-        self.mysql_port = 3308
+        self.mysql_host = "20.20.10.181"
+        self.mysql_port = 3306
         self.table_name = "T_CLUSTER".upper()
         self.table = None 
         self.over_write_table = False

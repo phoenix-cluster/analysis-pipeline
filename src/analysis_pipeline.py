@@ -56,8 +56,8 @@ def get_result_files(project_id):
             print('resultFiles.txt.started does not exist for Enhancer Project %s! \nAbort pipeline.'%(project_id))
             sys.exit(0)
 
-        logging.info('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
-        print('resultFiles.txt does not exist! Going to download data from PRIDE WebService')
+        logging.info('resultFiles.txt.started does not exist! Going to download data from PRIDE WebService')
+        print('resultFiles.txt.started does not exist! Going to download data from PRIDE WebService')
         project_files_url = config.get("Urls","project_files_url")  + project_id
         try:
             with urllib.request.urlopen(project_files_url) as response:
@@ -467,7 +467,8 @@ def main():
 
     if return_code == 0:
         #phoenix.upsert_analysis_status(project_id, 'finished', 'localhost')
-        mysql_acc.upsert_analysis_status(project_id, 'finished')
+        if not project_id.lower().startswith('p'):
+            mysql_acc.upsert_analysis_status(project_id, 'finished')
         os.rename(project_id + "/" + result_file_name, project_id + "/" + result_file_name[:-8])
     else:
         logging.info("This analysis %s is wrong"%project_id)

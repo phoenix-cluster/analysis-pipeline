@@ -377,7 +377,6 @@ def parser_mzident2(filename, score_field, title_field=None,
             spec_ident_all_attrib = ""
             for subelem in list(spec_ident):
                 spec_ident_all_attrib += str(subelem.attrib).lower()
-            print(score_field)
             if score_field.lower() not in spec_ident_all_attrib:
                 raise Exception("Failed to find supplied score field '" + score_field +
                                 "' in mzIdentML file.")

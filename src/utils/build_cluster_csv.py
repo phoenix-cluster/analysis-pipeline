@@ -2,7 +2,7 @@ import sys, os
 import csv
 
 """
-This program export cluster info from phoenix db to csv file.
+This program export cluster info from db to csv file.
 """
 file_dir = os.path.dirname(os.path.realpath(__file__))
 parent_path = os.path.abspath(os.path.join(file_dir, os.pardir))
@@ -76,20 +76,20 @@ def read_csv(csv_file, cluster_table_name):
 
 
 
-def main():
-    cluster_table = "T_CLUSTER_TEST"
-    csv_file = 'clusters_min5.csv'
-    fieldnames = [
-        'id',
-        'ratio',
-        'size',
-        'seqs_ratios',
-        'conf_sc',
-        'seqs_mods',
-    ]
+# def main():
+#     cluster_table = "T_CLUSTER_TEST"
+#     csv_file = 'clusters_min5.csv'
+#     fieldnames = [
+#         'id',
+#         'ratio',
+#         'size',
+#         'seqs_ratios',
+#         'conf_sc',
+#         'seqs_mods',
+#     ]
     # cluster_data = phoenix.get_all_clusters(host, cluster_table, 5)
-    cluster_data = mysql_acc.get_all_clusters(cluster_table, 5)
-    write_to_csv(cluster_data, csv_file, fieldnames)
+    # cluster_data = mysql_acc.get_all_clusters(cluster_table, 5)
+    # write_to_csv(cluster_data, csv_file, fieldnames)
     # cluster_data2 = read_csv(csv_file)
 
 

@@ -29,7 +29,10 @@ def remove_pepxml_ext(path_name):
 
 def build_spec_title(project_id, ms_run, index, value):
     enhancer_title = value
-    if re.match(r'E\d{6}', project_id):
+    if re.match(r'E\d{6}', project_id): #build id for Enhancer projects
+        enhancer_title = "%s;%s;spectrum=%s"%(project_id, ms_run.get('peakfile'), index)
+    if re.match(r'P(X|R)D\d{6}', project_id) and ms_run.get('psmfiletype') != 'pridexml':
+        #build id for test PRIDE projects which is not PRIDE XML(no filename/index in the title)
         enhancer_title = "%s;%s;spectrum=%s"%(project_id, ms_run.get('peakfile'), index)
     return enhancer_title
 

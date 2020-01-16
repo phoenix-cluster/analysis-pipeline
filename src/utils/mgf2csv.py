@@ -33,12 +33,15 @@ get integer charge from string, by removing '+' in the beginning or end
 """
 def deal_charge_int(charge_str):
     charge = 0
+    if charge_str is None or charge_str.lower() == 'none' or charge_str == '0': #if no charge values, return 0
+        return charge
+
     if charge_str.endswith('+'):
         charge_str = charge_str[:-1]
     try:
         charge = int(charge_str)
     except Exception as e:
-        logging.error("Wrong charge, %s is not like '+1' or '1+' or '1' " %(charge_str))
+        logging.error("Wrong charge111, %s is not like '+1' or '1+' or '1' " %(charge_str))
         logging.error(e)
     return charge
 
@@ -76,7 +79,6 @@ def get_spec_info(spectrum, data_type):
         else:
             cleanPeaklistMz.append(peakMz)
             cleanPeaklistIntens.append(peakIntens)
-
     return spectrumTitle,precursorMz,precursorIntens,charge, seq, mods, cleanPeaklistMz,cleanPeaklistIntens
 
 def get_row(projectid, filename, index, spectrum, data_type):
@@ -112,7 +114,7 @@ def write_to_csv (projectid, mgf_file, data_type):
 
     spec_file_name = mgf_file[:-4] + "_spec.csv"
     spec_file = open(spec_file_name,"w")
-    spec_writer = csv.writer(spec_file)
+    spec_writer = csv.writer(spec_file, lineterminator='\n')
     spec_writer.writerow(['spectrumTitle','precursorMz','precursorIntens','charge','peaklistMz','peaklistIntens'])
 
     if data_type == "peak_psm":
