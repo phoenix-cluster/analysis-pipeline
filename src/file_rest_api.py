@@ -51,22 +51,23 @@ class FileUpload(Resource):
         token = request.headers['token']
         id = int(request.headers['analysisId'])
         if not accession_id:
+            print("Error, None accession ID")
             return{'message':"None accessionId", 'status':'error'}
-
         analysis_job = mysql_acc.get_analysis_job(id)
         if analysis_job.get('token') != token:
+            print("Error, token is not equal.")
             return {
                     'data':'',
                     'message':'provided token is not equal to database, please input the right token for %s'%accession_id,
                     'status':'error'
                     }
-        if len(uploaded_files) < 1:
+        if uploaded_files == None or len(uploaded_files) < 1:
+            print("Error, uploaded_files less than 1.")
             return {
                     'data':'',
                     'message':'No file found',
                     'status':'error'
                     }
-
         month = time.strftime("%Y%m", time.localtime())
         date = time.strftime("%Y%m%d", time.localtime())
         project_path = os.path.join(self.UPLOAD_FOLDER, month, accession_id)
@@ -177,7 +178,6 @@ class DoAnalysis(Resource):
                 print("The analysis job %06d has been started"%(analysis_id))
                 return "The analysis job %06d has been started"%(analysis_id)
             accessionId = "E%06d"%(analysis_id)
-            # python_path = "/usr/bin/python3 "
             python_path = config.get("PipeLine", "python_path")
             pipeline_path = config.get("PipeLine", "pipeline_path")
             parameter_accession_id = " -p " + accessionId + " "

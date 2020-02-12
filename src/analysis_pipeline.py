@@ -168,16 +168,19 @@ def get_ms_runs(result_files):
             raise Exception("Filename: %s in resultFile does not end with .xml or .xml.gz or .mzid/.mztab or .mzid.gz/.mztab.gz" % (file))
 
         this_peakfile = ''
-        if filetype == 'psm':
+        if filetype == 'psm' : #find peak file with same prefix, in file list
             for result_file in result_files:
                 result_filename = result_file.get('filename')
                 if result_filename == ms_run_name + '.mgf' or result_filename == ms_run_name + '.MGF' \
                         or result_filename == ms_run_name + '.mzML':
                     this_peakfile = result_filename
                     break
-            if this_peakfile == '':
-                print("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
-                logging.error("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
+        if filetype == 'peaknpsm': # use same file name for the peak file
+            this_peakfile = filename
+
+        if this_peakfile == '':
+            print("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
+            logging.error("this psm file: %s don't have peak file %s with same NAME"%(filename, this_peakfile))
 
         ms_runs.append({"name":ms_run_name, "psmfiletype":psmfiletype,
                         "peakfile":this_peakfile,
@@ -322,6 +325,8 @@ def create_convert_shell_files(project_id, ms_runs):
         temp_index = parallel_jobs
         for ms_run in ms_runs:
             peakfile = ms_run.get('peakfile')
+            if peakfile.endswith("xml"):
+                peakfile = peakfile[:-3] + "mgf"  #PRIDE XML has been converted to mgf file
             if peakfile.endswith(".mgf") or peakfile.endswith(".MGF"):
                 temp_index -= 1
                 if temp_index == 0:
@@ -375,7 +380,6 @@ def main():
     logging.info("Get %d msrun from resultFiles.txt for project %s: " %(len(ms_runs), project_id))
     logging.info(ms_runs)
 
-    print(project_id)
     if not project_id.startswith("P"):
         # phoenix.upsert_analysis_status(project_id, 'started', 'localhost')
         mysql_acc.upsert_analysis_status(project_id, 'started')
@@ -400,7 +404,7 @@ def main():
         logging.info("unziping take time %d seconds"%(end - start))
 
     #retrieve psms and peaks to csv file
-    load_psms_peaks_to_csv_shell = project_id + "/load_psm_peaks_to_csv.sh"
+    load_psms_peaks_to_csv_shell = project_id + "/load_psms_peaks_to_csv.sh"
     redo = ''
     if is_silent:
         redo = silent_op
