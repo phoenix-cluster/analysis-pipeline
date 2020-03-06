@@ -22,8 +22,8 @@ COPY ./src/*.ini ./
 COPY ./src/utils ./utils
 COPY ./venv35 ./venv35
 
+RUN echo "/code/venv35/lib/python3.5/site-packages/" > /usr/local/lib/python3.5/dist-packages/venv35.pth 
 RUN chown -R biodocker:biodocker /code
-
 ################# switch the user ##################
 USER biodocker
 
