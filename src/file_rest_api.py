@@ -7,12 +7,14 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 import configparser
 
-file_dir = os.path.abspath('.')
+(file_dir, file_name) = os.path.split(os.path.realpath(__file__))
 sys.path.append(file_dir)
 import mysql_storage_access as mysql_acc
 
 config = configparser.ConfigParser()
 config.read("%s/config.ini"%(file_dir))
+print("%s/config.ini"%(file_dir))
+print(config)
 
 
 def after_request(response):
